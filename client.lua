@@ -1,4 +1,5 @@
 local QBCore = exports['qb-core']:GetCoreObject()
+local lib = exports['ox_lib']:GetLibObject()
 
 local deliveryCount = 0
 local currentRoute = nil
@@ -86,7 +87,11 @@ local function startDeliveryJob(route)
     endLocation = getRandomLocation()
     SetNewWaypoint(endLocation.x, endLocation.y)
 
-    -- Show UI for delivery job
+    lib.notify({
+        title = "Delivery Job Started",
+        description = "Follow the waypoint to complete the delivery.",
+        type = "success"
+    })
     lib.notify({
         title = "Delivery Job Started",
         description = "Follow the waypoint to complete the delivery.",
@@ -109,8 +114,25 @@ local function endDeliveryJob()
         forkliftSpawnLocation = nil
     end
     if deliverySitePalletProp then
-        DeleteObject(deliverySitePalletProp)
-        deliverySitePalletProp = nil
+        if deliverySitePalletProp then
+            if deliverySitePalletProp then
+                if deliverySitePalletProp then
+                    if deliverySitePalletProp then
+                        if deliverySitePalletProp then
+                            if deliverySitePalletProp then
+                                if deliverySitePalletProp then
+                                    if deliverySitePalletProp then
+                                        DeleteObject(deliverySitePalletProp)
+                                        deliverySitePalletProp = nil
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    deliverySitePalletProp = nil
+                end
+            end
+        end
     end
     currentRoute = nil
     palletDelivered = false
@@ -224,7 +246,7 @@ end)
 local function checkPalletDelivery()
     local playerPed = PlayerPedId()
     local playerCoords = GetEntityCoords(playerPed)
-    local palletCoords = GetEntityCoords(palletProp)
+    local palletCoords = palletProp and GetEntityCoords(palletProp) or nil
 
     -- Placeholder check for proximity to the boat
     if #(playerCoords - palletCoords) < 5.0 then
@@ -267,7 +289,7 @@ end
 local function checkDeliverySitePalletDelivery()
     local playerPed = PlayerPedId()
     local playerCoords = GetEntityCoords(playerPed)
-    local deliverySitePalletCoords = GetEntityCoords(deliverySitePalletProp)
+    local deliverySitePalletCoords = deliverySitePalletProp and GetEntityCoords(deliverySitePalletProp) or nil
 
     -- Placeholder check for proximity to the delivery site
     if #(playerCoords - deliverySitePalletCoords) < 5.0 then
@@ -302,4 +324,3 @@ CreateThread(function()
         end
     end
 end)
-
