@@ -54,3 +54,7 @@ Once the player pulls the boat up to the delivery location, they will need to mo
   - Restaurants
   - Vehicle dealerships
   - Other businesses
+  - Some stock items will only come from certain locations, simulating international       imports. 
+  - Examples:
+   Certain cars only come from Cayo Perico or other locations that specialize in providing those goods.
+   A dock area in the county is where most food comes from because the farms are near there.
