@@ -44,3 +44,13 @@ Once the player is done moving the pallets, they need to return the forklift to 
 ### Delivery Locations
 
 Once the player pulls the boat up to the delivery location, they will need to move the pallets off the ship and into a location at the delivery site. The same timing rules apply here: the player has 15 minutes to start the work, or everything will despawn, and they will fail the delivery.
+
+## Planned Future Functionality
+
+- Integration with delivery scripts that provide sales stock to stores around Los Santos, including:
+  - Convenience stores
+  - Clothing stores
+  - Bars
+  - Restaurants
+  - Vehicle dealerships
+  - Other businesses
