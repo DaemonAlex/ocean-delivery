@@ -6,8 +6,7 @@ Config.BonusPayout = 500 -- Bonus payout for every additional delivery in a row
 Config.SeriesBonus = 2000 -- Bonus payout for completing a series of 4 deliveries
 Config.JobStartCost = 0 -- Cost to start a delivery job, set to 0 for free jobs
 
--- Default ports and locations (can be expanded by admins)
-Config.Ports = {
+-- Default ports and locations. Add as many locations as you wish.
     {name = "Los Santos Marina", coords = vector3(-802.0, -1496.0, 0.0)},
     {name = "Paleto Bay Pier", coords = vector3(-275.0, 6635.0, 0.0)},
     {name = "Vespucci Beach", coords = vector3(-1599.0, -1097.0, 0.0)},
