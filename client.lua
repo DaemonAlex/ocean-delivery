@@ -64,39 +64,40 @@ local function spawnBoat(route)
 end
 
 local function spawnPallet()
-    -- Code to spawn a pallet prop at a placeholder location
+    -- Code to spawn a pallet prop at a location near the player
     local palletModel = GetHashKey("prop_boxpile_07d")
     RequestModel(palletModel)
     while not HasModelLoaded(palletModel) do
         Wait(1)
     end
 
-    local spawnLocation = vector3(math.random(-2000, 2000), math.random(-2000, 2000), 0.0)
+    local playerPed = PlayerPedId()
+    local playerCoords = GetEntityCoords(playerPed)
+    
+    -- Spawn pallet within visible distance of the player
+    local spawnLocation = vector3(
+        playerCoords.x + math.random(-30, 30), 
+        playerCoords.y + math.random(-30, 30), 
+        playerCoords.z
+    )
+    
+    -- Ensure pallet is spawned on the ground
+    local ground, groundZ = GetGroundZFor_3dCoord(spawnLocation.x, spawnLocation.y, spawnLocation.z + 10.0, 0)
+    if ground then
+        spawnLocation = vector3(spawnLocation.x, spawnLocation.y, groundZ)
+    end
+    
     palletProp = CreateObject(palletModel, spawnLocation.x, spawnLocation.y, spawnLocation.z, true, true, false)
+    
+    -- Set waypoint to the pallet
+    SetNewWaypoint(spawnLocation.x, spawnLocation.y)
+    
+    lib.notify({
+        title = "Pallet Spawned",
+        description = "Find the pallet and move it to the boat using the forklift.",
+        type = "info"
+    })
 end
-
-local function startDeliveryJob(route)
-    -- Code to start the delivery job
-    spawnBoat(route)
-    spawnPallet()
-    deliveryCount = deliveryCount + 1
-    currentRoute = route
-    palletDelivered = false
-
-    -- Set waypoints based on the selected route
-    endLocation = getRandomLocation()
-    SetNewWaypoint(endLocation.x, endLocation.y)
-
-    lib.notify({
-        title = "Delivery Job Started",
-        description = "Follow the waypoint to complete the delivery.",
-        type = "success"
-    })
-    lib.notify({
-        title = "Delivery Job Started",
-        description = "Follow the waypoint to complete the delivery.",
-        type = "success"
-    })
 
     -- Start job timer
     jobTimer = GetGameTimer() + 15 * 60 * 1000 -- 15 minutes
