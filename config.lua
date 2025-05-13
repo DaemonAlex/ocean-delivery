@@ -6,7 +6,7 @@ Config.BonusPayout = 500 -- Bonus payout for every additional delivery in a row
 Config.SeriesBonus = 2000 -- Bonus payout for completing a series of 4 deliveries
 Config.JobStartCost = 0 -- Cost to start a delivery job, set to 0 for free jobs
 
--- Define the ports and locations (updated with more realistic water locations)
+-- Default ports and locations (can be expanded by admins)
 Config.Ports = {
     {name = "Los Santos Marina", coords = vector3(-802.0, -1496.0, 0.0)},
     {name = "Paleto Bay Pier", coords = vector3(-275.0, 6635.0, 0.0)},
@@ -21,6 +21,11 @@ Config.Boats = {
     {label = "Marquis", model = "marquis"},
     {label = "Toro", model = "toro"}
 }
+
+-- Route generation settings
+Config.MinRouteDistance = 1000.0 -- Minimum distance between pickup and delivery for a valid route
+Config.MaxRouteDistance = 8000.0 -- Maximum distance for routes (prevents excessive travel)
+Config.RouteOptions = 4 -- Number of route options to present to the player
 
 -- Forklift settings
 Config.ForkliftModel = "forklift" -- Model name for the forklift
@@ -40,3 +45,12 @@ Config.UseBankingSystem = true -- Set to false to use basic QBCore money functio
 
 -- Debug settings
 Config.Debug = false -- Set to true to enable debug prints
+
+-- Custom Locations System (will be populated from database)
+Config.CustomLocations = {}
+
+-- Function to save locations to database (called from server)
+function Config.SaveLocations()
+    -- This is just a placeholder - the actual implementation is in server.lua
+    -- Will be called whenever locations are added/removed
+end
