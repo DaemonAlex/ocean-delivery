@@ -133,21 +133,31 @@ end
 end
 
 local function spawnDeliverySitePallet()
-    -- Code to spawn a pallet prop at the delivery site
+    -- Code to spawn a pallet prop at the delivery site near the end location
     local palletModel = GetHashKey("prop_boxpile_07d")
     RequestModel(palletModel)
     while not HasModelLoaded(palletModel) do
         Wait(1)
     end
 
-    local spawnLocation = vector3(math.random(-2000, 2000), math.random(-2000, 2000), 0.0)
+    -- Use the end location with a small offset for the delivery site
+    local spawnLocation = vector3(
+        endLocation.x + math.random(-10, 10), 
+        endLocation.y + math.random(-10, 10), 
+        endLocation.z
+    )
+    
+    -- Ensure pallet is spawned on the ground
+    local ground, groundZ = GetGroundZFor_3dCoord(spawnLocation.x, spawnLocation.y, spawnLocation.z + 10.0, 0)
+    if ground then
+        spawnLocation = vector3(spawnLocation.x, spawnLocation.y, groundZ)
+    end
+    
     deliverySitePalletProp = CreateObject(palletModel, spawnLocation.x, spawnLocation.y, spawnLocation.z, true, true, false)
+    
+    -- Set waypoint to the delivery site
+    SetNewWaypoint(spawnLocation.x, spawnLocation.y)
 end
-
-local function startDeliverySiteJob()
-    -- Code to start the delivery site job
-    spawnDeliverySitePallet()
-    deliverySiteTimer = GetGameTimer() + 15 * 60 * 1000 -- 15 minutes
 
     lib.notify({
         title = "Delivery Site Job Started",
@@ -198,7 +208,6 @@ RegisterNetEvent('cargo:resetDeliveryCount', function()
     resetDeliveryCount()
 end)
 
--- Function to handle moving the pallet with a forklift
 local function movePalletToDock()
     local forkliftModel = GetHashKey("forklift")
     RequestModel(forkliftModel)
@@ -207,12 +216,32 @@ local function movePalletToDock()
     end
 
     local playerPed = PlayerPedId()
-    forkliftSpawnLocation = vector3(math.random(-2000, 2000), math.random(-2000, 2000), 0.0)
+    local playerCoords = GetEntityCoords(playerPed)
+    
+    -- Spawn forklift near the player instead of random coordinates
+    forkliftSpawnLocation = vector3(
+        playerCoords.x + math.random(-20, 20), 
+        playerCoords.y + math.random(-20, 20), 
+        playerCoords.z
+    )
+    
+    -- Ensure forklift is spawned on the ground
+    local ground, groundZ = GetGroundZFor_3dCoord(forkliftSpawnLocation.x, forkliftSpawnLocation.y, forkliftSpawnLocation.z + 10.0, 0)
+    if ground then
+        forkliftSpawnLocation = vector3(forkliftSpawnLocation.x, forkliftSpawnLocation.y, groundZ)
+    end
+    
     forklift = CreateVehicle(forkliftModel, forkliftSpawnLocation.x, forkliftSpawnLocation.y, forkliftSpawnLocation.z, math.random(0, 360), true, false)
     TaskWarpPedIntoVehicle(playerPed, forklift, -1)
 
-    -- Placeholder destination location on the dock
-    local destination = vector3(math.random(-2000, 2000), math.random(-2000, 2000), 0.0)
+    -- Set destination to dock area near the boat
+    local boatCoords = startLocation
+    local destination = vector3(
+        boatCoords.x + math.random(-10, 10), 
+        boatCoords.y + math.random(-10, 10), 
+        boatCoords.z
+    )
+    
     SetNewWaypoint(destination.x, destination.y)
 
     lib.notify({
