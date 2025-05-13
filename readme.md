@@ -44,3 +44,54 @@ Once the player is done moving the pallets, they need to return the forklift to 
 ### Delivery Locations
 
 Once the player pulls the boat up to the delivery location, they will need to move the pallets off the ship and into a location at the delivery site. The same timing rules apply here: the player has 15 minutes to start the work, or everything will despawn, and they will fail the delivery.
+1. **Adding Locations**:
+   * As an admin, navigate to a suitable water location in a boat
+   * Use command: `/adddeliverylocation Los Santos Yacht Club`
+   * Confirm the location is added by using `/listdeliverylocations`
+2. **Starting a Delivery Job**:
+   * Use `/startdelivery` command
+   * You should see a list of routes generated based on available locations
+   * Each route will show start and end locations with distance
+3. **Testing Route Delivery**:
+   * Select a route and complete the delivery
+   * Verify that the dynamic route works correctly
+   * Check proximity for pallet loading and delivery
+
+### Key Features to Verify
+
+* **Location Management**:
+   * Adding locations saves them to database
+   * Locations persist after server restart
+   * Can view and manage locations with admin commands
+* **Dynamic Route Generation**:
+   * Routes are generated based on available locations
+   * Routes respect minimum and maximum distance settings
+   * Routes include start/end locations and distance display
+* **Route Selection**:
+   * Route selection UI shows all valid routes
+   * Player can choose from multiple route options
+   * Route name displays both start and end location
+
+### Admin Commands Reference
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `/adddeliverylocation [name]` | Add location at current position | `/adddeliverylocation Paleto Dock` |
+| `/listdeliverylocations` | View all available locations | `/listdeliverylocations` |
+| `/removedeliverylocation [id]` | Remove location by ID | `/removedeliverylocation 5` |
+| `/resetdelivery [player_id]` | Reset a player's delivery job | `/resetdelivery 3` |
+
+### Player Commands
+
+| Command | Description |
+|---------|-------------|
+| `/startdelivery` | Start a new delivery job |
+| `/enddelivery` | Cancel current delivery job |
+| `/deliverystats` | View delivery statistics |
+
+### Troubleshooting Tips
+
+* **If locations don't sync**: Check server console for errors in the `cargo_locations` table creation
+* **If routes don't generate**: Make sure you have at least 2 valid locations
+* **If ox_target isn't working**: The script will fall back to proximity detection
+* **If banking payments fail**: Check if the appropriate banking system is installed
