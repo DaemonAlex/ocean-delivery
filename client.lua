@@ -1,4 +1,29 @@
-local QBCore = exports['qb-core']:GetCoreObject()
+local QBCore = nil
+local isQBX = false
+
+-- Try to get QBX Core first
+local success, error = pcall(function()
+    QBCore = exports['qbx-core']:GetCoreObject()
+    isQBX = true
+end)
+
+-- Fall back to QBCore if QBX Core is not available
+if not success then
+    QBCore = exports['qb-core']:GetCoreObject()
+    isQBX = false
+end
+
+-- Create compatibility functions
+local function NotifyPlayer(source, message, type)
+    if isQBX then
+        TriggerEvent('qbx-core:notify', {
+            description = message,
+            type = type
+        })
+    else
+        TriggerEvent('QBCore:Notify', message, type)
+    end
+end
 local lib = exports['ox_lib']:GetLibObject()
 
 -- Variables
@@ -775,4 +800,14 @@ CreateThread(function()
     Wait(1000)
     
     debugPrint("Ocean Delivery initialized")
+end)
+
+RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
+    -- Handle QBCore player loaded
+    TriggerServerEvent('cargo:playerLoaded')
+end)
+
+RegisterNetEvent('qbx-core:client:PlayerLoaded', function()
+    -- Handle QBX player loaded
+    TriggerServerEvent('cargo:playerLoaded')
 end)
