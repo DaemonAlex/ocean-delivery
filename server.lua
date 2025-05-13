@@ -1,4 +1,3 @@
--- SERVER.LUA - COMPLETE FILE
 local QBCore = exports['qb-core']:GetCoreObject()
 
 -- Store active jobs for persistence across server restarts
@@ -30,6 +29,168 @@ local function debugPrint(message)
     if Config.Debug then
         print("[Ocean Delivery] " .. message)
     end
+end
+
+-- Initialize database table for custom locations
+CreateThread(function()
+    Wait(1000) -- Wait for MySQL to initialize
+    
+    -- Create table for custom locations if it doesn't exist
+    MySQL.Async.execute([[
+        CREATE TABLE IF NOT EXISTS cargo_locations (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            x FLOAT NOT NULL,
+            y FLOAT NOT NULL,
+            z FLOAT NOT NULL,
+            enabled BOOLEAN DEFAULT TRUE,
+            added_by VARCHAR(50),
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ]], {}, function(success)
+        if success then
+            debugPrint("Cargo locations table initialized")
+            LoadCustomLocations()
+        else
+            debugPrint("Failed to initialize cargo locations table")
+        end
+    end)
+end)
+
+-- Load custom locations from database
+function LoadCustomLocations()
+    MySQL.Async.fetchAll('SELECT * FROM cargo_locations WHERE enabled = 1', {}, function(result)
+        if result and #result > 0 then
+            Config.CustomLocations = {}
+            
+            for i=1, #result do
+                local location = result[i]
+                table.insert(Config.CustomLocations, {
+                    id = location.id,
+                    name = location.name,
+                    coords = vector3(location.x, location.y, location.z)
+                })
+            end
+            
+            debugPrint("Loaded " .. #Config.CustomLocations .. " custom locations")
+        else
+            Config.CustomLocations = {}
+            debugPrint("No custom locations found in database")
+        end
+        
+        -- Merge with default ports if needed
+        MergeCustomAndDefaultLocations()
+    end)
+end
+
+-- Merge custom locations with default ports
+function MergeCustomAndDefaultLocations()
+    Config.AllLocations = {}
+    
+    -- Add default ports
+    for i=1, #Config.Ports do
+        table.insert(Config.AllLocations, Config.Ports[i])
+    end
+    
+    -- Add custom locations
+    for i=1, #Config.CustomLocations do
+        table.insert(Config.AllLocations, Config.CustomLocations[i])
+    end
+    
+    debugPrint("Total available locations: " .. #Config.AllLocations)
+    
+    -- Sync to all clients
+    TriggerClientEvent('cargo:syncLocations', -1, Config.AllLocations)
+end
+
+-- Add a custom location
+function AddCustomLocation(name, coords, addedBy)
+    MySQL.Async.execute('INSERT INTO cargo_locations (name, x, y, z, added_by) VALUES (?, ?, ?, ?, ?)', 
+        {name, coords.x, coords.y, coords.z, addedBy}, function(rowsChanged)
+        if rowsChanged > 0 then
+            debugPrint("Added new location: " .. name)
+            LoadCustomLocations() -- Reload and sync
+        else
+            debugPrint("Failed to add location: " .. name)
+        end
+    end)
+end
+
+-- Remove a custom location
+function RemoveCustomLocation(id)
+    MySQL.Async.execute('UPDATE cargo_locations SET enabled = 0 WHERE id = ?', {id}, function(rowsChanged)
+        if rowsChanged > 0 then
+            debugPrint("Removed location with ID: " .. id)
+            LoadCustomLocations() -- Reload and sync
+        else
+            debugPrint("Failed to remove location with ID: " .. id)
+        end
+    end)
+end
+
+-- Generate a set of routes for player selection
+function GenerateRoutes(source)
+    local routes = {}
+    local locations = Config.AllLocations
+    
+    -- Need at least 2 locations to create routes
+    if #locations < 2 then
+        TriggerClientEvent('QBCore:Notify', source, "Not enough delivery locations available", "error")
+        return nil
+    end
+    
+    -- Generate route options
+    for i = 1, math.min(Config.RouteOptions, (#locations * (#locations - 1) / 2)) do
+        local routeFound = false
+        local attempts = 0
+        local start, finish
+        
+        -- Try to find a valid route
+        while not routeFound and attempts < 50 do
+            attempts = attempts + 1
+            
+            -- Pick random start and end locations
+            start = math.random(1, #locations)
+            finish = math.random(1, #locations)
+            
+            -- Ensure they're different locations
+            if start ~= finish then
+                local startCoords = locations[start].coords
+                local finishCoords = locations[finish].coords
+                local distance = #(startCoords - finishCoords)
+                
+                -- Check if distance is within range
+                if distance >= Config.MinRouteDistance and distance <= Config.MaxRouteDistance then
+                    -- Check if this route already exists in our selection
+                    local isDuplicate = false
+                    for j = 1, #routes do
+                        if (routes[j].start == start and routes[j].finish == finish) or
+                           (routes[j].start == finish and routes[j].finish == start) then
+                            isDuplicate = true
+                            break
+                        end
+                    end
+                    
+                    if not isDuplicate then
+                        routeFound = true
+                    end
+                end
+            end
+        end
+        
+        if routeFound then
+            table.insert(routes, {
+                start = start,
+                finish = finish,
+                startName = locations[start].name,
+                finishName = locations[finish].name,
+                distance = #(locations[start].coords - locations[finish].coords),
+                label = locations[start].name .. " → " .. locations[finish].name
+            })
+        end
+    end
+    
+    return routes
 end
 
 -- Events
@@ -114,9 +275,10 @@ RegisterNetEvent('cargo:deliveryComplete', function(deliveryCount, distance)
     end
 end)
 
-RegisterNetEvent('cargo:startDelivery', function(route)
+RegisterNetEvent('cargo:startDelivery', function(routeData)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
+    
     if Player then
         -- Check if player already has an active job
         if activeJobs[Player.PlayerData.citizenid] then
@@ -132,20 +294,36 @@ RegisterNetEvent('cargo:startDelivery', function(route)
                 Player.Functions.RemoveMoney('cash', jobStartCost, "Delivery Job Fee")
                 TriggerClientEvent('QBCore:Notify', src, "You paid $" .. jobStartCost .. " to start the delivery job.", "info")
                 
-                -- Notify the client to spawn the boat and pallet
-                TriggerClientEvent('cargo:spawnBoatAndPallet', src, route)
+                -- Start the job with the selected route
+                TriggerClientEvent('cargo:spawnBoatAndPallet', src, routeData)
             else
                 -- Not enough money
                 TriggerClientEvent('QBCore:Notify', src, "You need $" .. jobStartCost .. " to start a delivery job", "error")
                 return
             end
         else
-            -- No cost to start job
-            TriggerClientEvent('cargo:spawnBoatAndPallet', src, route)
+            -- No cost to start job, just start it
+            TriggerClientEvent('cargo:spawnBoatAndPallet', src, routeData)
         end
     else
         debugPrint("Player not found for source: " .. src)
     end
+end)
+
+-- Event to receive player position for adding a location
+RegisterNetEvent('cargo:addLocationAtPosition', function(name, position)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    
+    -- Check admin permission again
+    if not Player.PlayerData.permission or (Player.PlayerData.permission ~= "admin" and Player.PlayerData.permission ~= "god") then
+        TriggerClientEvent('QBCore:Notify', src, "Permission denied", "error")
+        return
+    end
+    
+    -- Add the location
+    AddCustomLocation(name, position, Player.PlayerData.citizenid)
+    TriggerClientEvent('QBCore:Notify', src, "Added delivery location: " .. name, "success")
 end)
 
 -- Restore active job when player loads
@@ -176,6 +354,7 @@ RegisterNetEvent('QBCore:Server:OnPlayerUnload', function(source)
     end
 end)
 
+-- Callbacks
 -- Get player's current delivery count
 QBCore.Functions.CreateCallback('cargo:getDeliveryCount', function(source, cb)
     local src = source
@@ -225,8 +404,13 @@ QBCore.Functions.CreateCallback('cargo:getTotalEarnings', function(source, cb)
     end
 end)
 
--- Commands
+-- Create a callback to provide routes to the client
+QBCore.Functions.CreateCallback('cargo:getRoutes', function(source, cb)
+    local routes = GenerateRoutes(source)
+    cb(routes)
+end)
 
+-- Commands
 -- Command to admin reset a player's delivery job
 QBCore.Commands.Add('resetdelivery', 'Reset a player\'s delivery job (Admin Only)', {{name = 'id', help = 'Player ID'}}, true, function(source, args)
     local src = source
@@ -284,6 +468,66 @@ QBCore.Commands.Add('deliverystats', 'Check your delivery job statistics', {}, f
             end
         end)
     end
+end)
+
+-- Admin command to add a location at current position
+QBCore.Commands.Add('adddeliverylocation', 'Add a delivery location at your position (Admin Only)', {{name = 'name', help = 'Location name'}}, true, function(source, args)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    
+    -- Check admin permission
+    if not Player.PlayerData.permission or (Player.PlayerData.permission ~= "admin" and Player.PlayerData.permission ~= "god") then
+        TriggerClientEvent('QBCore:Notify', src, "You don't have permission to use this command", "error")
+        return
+    end
+    
+    if not args[1] then
+        TriggerClientEvent('QBCore:Notify', src, "Please specify a location name", "error")
+        return
+    end
+    
+    local locationName = table.concat(args, " ")
+    
+    -- Get player's position
+    TriggerClientEvent('cargo:getPlayerPosition', src, locationName)
+end)
+
+-- Admin command to list all locations
+QBCore.Commands.Add('listdeliverylocations', 'List all delivery locations (Admin Only)', {}, true, function(source, args)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    
+    -- Check admin permission
+    if not Player.PlayerData.permission or (Player.PlayerData.permission ~= "admin" and Player.PlayerData.permission ~= "god") then
+        TriggerClientEvent('QBCore:Notify', src, "You don't have permission to use this command", "error")
+        return
+    end
+    
+    -- List all locations
+    TriggerClientEvent('cargo:showLocationsList', src, Config.AllLocations)
+end)
+
+-- Admin command to remove a location
+QBCore.Commands.Add('removedeliverylocation', 'Remove a delivery location (Admin Only)', {{name = 'id', help = 'Location ID'}}, true, function(source, args)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    
+    -- Check admin permission
+    if not Player.PlayerData.permission or (Player.PlayerData.permission ~= "admin" and Player.PlayerData.permission ~= "god") then
+        TriggerClientEvent('QBCore:Notify', src, "You don't have permission to use this command", "error")
+        return
+    end
+    
+    if not args[1] or not tonumber(args[1]) then
+        TriggerClientEvent('QBCore:Notify', src, "Please specify a valid location ID", "error")
+        return
+    end
+    
+    local locationId = tonumber(args[1])
+    
+    -- Remove the location
+    RemoveCustomLocation(locationId)
+    TriggerClientEvent('QBCore:Notify', src, "Removed delivery location with ID: " .. locationId, "success")
 end)
 
 -- Resource start
