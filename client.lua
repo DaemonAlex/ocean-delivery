@@ -113,27 +113,10 @@ local function endDeliveryJob()
         forklift = nil
         forkliftSpawnLocation = nil
     end
-    if deliverySitePalletProp then
-        if deliverySitePalletProp then
-            if deliverySitePalletProp then
-                if deliverySitePalletProp then
-                    if deliverySitePalletProp then
-                        if deliverySitePalletProp then
-                            if deliverySitePalletProp then
-                                if deliverySitePalletProp then
-                                    if deliverySitePalletProp then
-                                        DeleteObject(deliverySitePalletProp)
-                                        deliverySitePalletProp = nil
-                                    end
-                                end
-                            end
-                        end
-                    end
-                    deliverySitePalletProp = nil
-                end
-            end
-        end
-    end
+if deliverySitePalletProp then
+    DeleteObject(deliverySitePalletProp)
+    deliverySitePalletProp = nil
+end
     currentRoute = nil
     palletDelivered = false
     jobTimer = nil
