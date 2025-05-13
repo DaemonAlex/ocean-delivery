@@ -15,6 +15,7 @@ local startLocation = nil
 local endLocation = nil
 local isOnJob = false -- State management to prevent multiple jobs
 local currentBoat = nil -- Track current boat entity
+local allLocations = {} -- Variable to store synced locations
 
 -- Functions
 local function resetDeliveryCount()
@@ -28,34 +29,55 @@ local function debugPrint(message)
 end
 
 local function showRouteSelection()
-    -- Code to show route selection UI using ox_lib
-    local routes = {
-        {label = "Route 1", value = "Route 1"},
-        {label = "Route 2", value = "Route 2"},
-        {label = "Route 3", value = "Route 3"}
-    }
+    -- Request routes from server
+    QBCore.Functions.TriggerCallback('cargo:getRoutes', function(routes)
+        if not routes or #routes == 0 then
+            lib.notify({
+                title = "No Routes Available",
+                description = "No valid delivery routes could be generated.",
+                type = "error"
+            })
+            return
+        end
+        
+        -- Format routes for selection dialog
+        local routeOptions = {}
+        for i, route in ipairs(routes) do
+            table.insert(routeOptions, {
+                label = route.label .. " (" .. math.floor(route.distance) .. " units)",
+                value = i
+            })
+        end
 
-    local input = lib.inputDialog("Select a Route", {
-        {type = "select", label = "Route", options = routes}
-    })
+        local input = lib.inputDialog("Select a Delivery Route", {
+            {type = "select", label = "Route", options = routeOptions}
+        })
 
-    if input then
-        local selectedRoute = input[1]
-        debugPrint("Selected route: " .. selectedRoute)
-        return selectedRoute
-    else
-        debugPrint("No route selected")
-        return nil
-    end
+        if input then
+            local selectedIndex = input[1]
+            local selectedRoute = routes[selectedIndex]
+            
+            debugPrint("Selected route: " .. selectedRoute.label)
+            TriggerServerEvent('cargo:startDelivery', selectedRoute)
+        else
+            debugPrint("No route selected")
+        end
+    end)
 end
 
 local function getRandomLocation()
-    local ports = Config.Ports
-    return ports[math.random(#ports)].coords
+    local locations = allLocations
+    if #locations == 0 then
+        locations = Config.Ports -- Fallback to default ports if no locations synced
+    end
+    return locations[math.random(#locations)].coords
 end
 
-local function spawnBoat(route)
-    -- Code to spawn a boat at a specified location based on the route
+local function spawnBoat(routeData)
+    -- Get start location from route data
+    local startCoords = allLocations[routeData.start].coords
+    
+    -- Code to spawn a boat at the specified location
     local boats = Config.Boats
     local randomBoat = boats[math.random(#boats)]
     local boatModel = GetHashKey(randomBoat.model)
@@ -64,12 +86,9 @@ local function spawnBoat(route)
         Wait(1)
     end
 
-    -- Placeholder random location for boat spawning
-    startLocation = getRandomLocation()
     local heading = math.random(0, 360)
-
     local playerPed = PlayerPedId()
-    local boat = CreateVehicle(boatModel, startLocation.x, startLocation.y, startLocation.z, heading, true, false)
+    local boat = CreateVehicle(boatModel, startCoords.x, startCoords.y, startCoords.z, heading, true, false)
     TaskWarpPedIntoVehicle(playerPed, boat, -1)
     
     -- Set this boat as a mission entity so it doesn't get deleted
@@ -157,7 +176,7 @@ local function spawnPallet()
     })
 end
 
-local function startDeliveryJob(route)
+local function startDeliveryJob(routeData)
     -- Prevent starting multiple jobs
     if isOnJob then
         lib.notify({
@@ -168,38 +187,53 @@ local function startDeliveryJob(route)
         return
     end
     
+    -- Check if we have locations synced
+    if #allLocations == 0 and #Config.Ports == 0 then
+        lib.notify({
+            title = "No Locations Available",
+            description = "No delivery locations available. Please try again later.",
+            type = "error"
+        })
+        return
+    end
+    
     isOnJob = true
     
-    -- Code to start the delivery job
-    local boatEntity = spawnBoat(route)
+    -- Get start and end locations from route data
+    startLocation = allLocations[routeData.start].coords
+    endLocation = allLocations[routeData.finish].coords
+    
+    -- Spawn boat at start location
+    local boat = spawnBoat(routeData)
     spawnPallet()
     deliveryCount = deliveryCount + 1
-    currentRoute = route
+    currentRoute = routeData
     palletDelivered = false
 
-    -- Set waypoints based on the selected route
-    endLocation = getRandomLocation()
-    SetNewWaypoint(endLocation.x, endLocation.y)
+    -- Set waypoint to destination
+    SetNewWaypoint(startLocation.x, startLocation.y)
 
     lib.notify({
         title = "Delivery Job Started",
-        description = "Follow the waypoint to complete the delivery.",
+        description = "Pickup cargo at " .. allLocations[routeData.start].name .. " and deliver to " .. allLocations[routeData.finish].name,
         type = "success"
     })
 
     -- Start job timer
-    jobTimer = GetGameTimer() + 15 * 60 * 1000 -- 15 minutes
+    jobTimer = GetGameTimer() + Config.PickupTimer
     
     -- Save job data for persistence
     local jobData = {
-        route = route,
+        route = routeData,
         deliveryCount = deliveryCount,
-        startLocation = startLocation,
-        endLocation = endLocation,
+        startLocationIndex = routeData.start,
+        endLocationIndex = routeData.finish,
         jobTimer = jobTimer,
-        boatNetId = NetworkGetNetworkIdFromEntity(boatEntity)
+        boatNetId = NetworkGetNetworkIdFromEntity(boat)
     }
     TriggerServerEvent('cargo:jobStarted', jobData)
+    
+    return boat
 end
 
 local function spawnDeliverySitePallet()
@@ -268,7 +302,7 @@ end
 local function startDeliverySiteJob()
     -- Code to start the delivery site job
     spawnDeliverySitePallet()
-    deliverySiteTimer = GetGameTimer() + 15 * 60 * 1000 -- 15 minutes
+    deliverySiteTimer = GetGameTimer() + Config.DeliveryTimer
 
     lib.notify({
         title = "Delivery Site Job Started",
@@ -327,7 +361,7 @@ local function endDeliveryJob()
 end
 
 local function movePalletToDock()
-    local forkliftModel = GetHashKey("forklift")
+    local forkliftModel = GetHashKey(Config.ForkliftModel)
     RequestModel(forkliftModel)
     while not HasModelLoaded(forkliftModel) do
         Wait(1)
@@ -338,8 +372,8 @@ local function movePalletToDock()
     
     -- Spawn forklift near the player instead of random coordinates
     forkliftSpawnLocation = vector3(
-        playerCoords.x + math.random(-20, 20), 
-        playerCoords.y + math.random(-20, 20), 
+        playerCoords.x + math.random(-Config.ForkliftSpawnDistance, Config.ForkliftSpawnDistance), 
+        playerCoords.y + math.random(-Config.ForkliftSpawnDistance, Config.ForkliftSpawnDistance), 
         playerCoords.z
     )
     
@@ -378,7 +412,7 @@ local function checkPalletDelivery()
     local boatCoords = GetEntityCoords(currentBoat)
     
     -- Check if the pallet is near the boat (rather than checking if player is near pallet)
-    if #(palletCoords - boatCoords) < 7.0 then
+    if #(palletCoords - boatCoords) < Config.PalletProximity then
         palletDelivered = true
         lib.notify({
             title = "Pallet Loaded",
@@ -395,7 +429,7 @@ end
 local function checkForkliftReturn()
     if forklift and forkliftSpawnLocation then
         local forkliftCoords = GetEntityCoords(forklift)
-        if #(forkliftCoords - forkliftSpawnLocation) < 5.0 then
+        if #(forkliftCoords - forkliftSpawnLocation) < Config.ForkliftReturnProximity then
             DeleteVehicle(forklift)
             forklift = nil
             forkliftSpawnLocation = nil
@@ -423,7 +457,7 @@ local function checkDeliverySitePalletDelivery()
     local deliverySitePalletCoords = GetEntityCoords(deliverySitePalletProp)
 
     -- Check for proximity to the delivery site
-    if #(playerCoords - deliverySitePalletCoords) < 5.0 then
+    if #(playerCoords - deliverySitePalletCoords) < Config.DeliverySiteProximity then
         if exports.ox_target then
             exports.ox_target:removeLocalEntity(deliverySitePalletProp)
         end
@@ -446,18 +480,19 @@ local function checkDeliverySitePalletDelivery()
 end
 
 -- Network Events
-RegisterNetEvent('cargo:startDelivery', function()
-    -- Code to start the delivery job
-    local selectedRoute = showRouteSelection()
-    if selectedRoute then
-        TriggerServerEvent('cargo:startDelivery', selectedRoute)
-    else
-        debugPrint("Delivery job cancelled")
-    end
+-- Sync locations from server
+RegisterNetEvent('cargo:syncLocations', function(locations)
+    allLocations = locations
+    debugPrint("Received " .. #allLocations .. " delivery locations from server")
 end)
 
-RegisterNetEvent('cargo:spawnBoatAndPallet', function(route)
-    startDeliveryJob(route)
+RegisterNetEvent('cargo:startDelivery', function()
+    -- Code to start the delivery job - now uses dynamic route selection
+    showRouteSelection()
+end)
+
+RegisterNetEvent('cargo:spawnBoatAndPallet', function(routeData)
+    startDeliveryJob(routeData)
 end)
 
 RegisterNetEvent('cargo:completeDelivery', function()
@@ -499,43 +534,133 @@ RegisterNetEvent('cargo:movePallet', function()
     movePalletToDock()
 end)
 
+-- For admin commands: Get player position
+RegisterNetEvent('cargo:getPlayerPosition', function(locationName)
+    local playerPed = PlayerPedId()
+    local pos = GetEntityCoords(playerPed)
+    
+    -- If in a boat, use boat position (more accurate for water locations)
+    if IsPedInAnyVehicle(playerPed, false) then
+        local vehicle = GetVehiclePedIsIn(playerPed, false)
+        if IsThisModelABoat(GetEntityModel(vehicle)) then
+            pos = GetEntityCoords(vehicle)
+        end
+    end
+    
+    -- Send position back to server to save as a location
+    TriggerServerEvent('cargo:addLocationAtPosition', locationName, pos)
+end)
+
+-- Function to display locations list
+RegisterNetEvent('cargo:showLocationsList', function(locations)
+    if not locations or #locations == 0 then
+        lib.notify({
+            title = "No Locations",
+            description = "No delivery locations are available.",
+            type = "error"
+        })
+        return
+    end
+    
+    -- Build location list as a formatted string
+    local locationsList = "^3ID | Name | Coordinates^7\n"
+    
+    for i, location in ipairs(locations) do
+        local coords = location.coords
+        local id = location.id or i
+        locationsList = locationsList .. string.format("^2%d^7 | ^3%s^7 | ^5%.1f, %.1f, %.1f^7\n", 
+            id, location.name, coords.x, coords.y, coords.z)
+    end
+    
+    -- Use ox_lib context menu for a nice display
+    if lib.contextMenu then
+        local contextMenu = {
+            id = 'delivery_locations',
+            title = 'Delivery Locations',
+            options = {}
+        }
+        
+        for i, location in ipairs(locations) do
+            local coords = location.coords
+            local id = location.id or i
+            
+            table.insert(contextMenu.options, {
+                title = location.name,
+                description = string.format("ID: %d | Coords: %.1f, %.1f, %.1f", id, coords.x, coords.y, coords.z),
+                onSelect = function()
+                    -- Set waypoint to this location
+                    SetNewWaypoint(coords.x, coords.y)
+                    lib.notify({
+                        title = "Waypoint Set",
+                        description = "Waypoint set to " .. location.name,
+                        type = "success"
+                    })
+                end
+            })
+        end
+        
+        lib.showContext('delivery_locations')
+    else
+        -- Fallback to just printing to console
+        print(locationsList)
+        TriggerEvent('chat:addMessage', {
+            color = {255, 255, 0},
+            multiline = true,
+            args = {"Delivery Locations", locationsList}
+        })
+    end
+end)
+
 -- Event to restore job state after player reconnection
 RegisterNetEvent('cargo:restoreJob', function(jobData)
     if jobData then
         isOnJob = true
         deliveryCount = jobData.deliveryCount
         currentRoute = jobData.route
-        startLocation = jobData.startLocation
-        endLocation = jobData.endLocation
-        jobTimer = jobData.jobTimer
         
-        -- Restore boat entity if it exists
-        if jobData.boatNetId then
-            local boatEntity = NetworkGetEntityFromNetworkId(jobData.boatNetId)
-            if DoesEntityExist(boatEntity) then
-                -- Save the current boat entity
-                currentBoat = boatEntity
-                
-                -- Teleport player to boat
-                local playerPed = PlayerPedId()
-                SetEntityCoords(playerPed, startLocation.x, startLocation.y, startLocation.z + 1.0)
-                TaskWarpPedIntoVehicle(playerPed, boatEntity, -1)
-                
-                lib.notify({
-                    title = "Job Restored",
-                    description = "Your delivery job has been restored.",
-                    type = "success"
-                })
-            else
-                -- Boat doesn't exist anymore, restart the job
-                lib.notify({
-                    title = "Job Restarted",
-                    description = "Your delivery boat was lost, spawning a new one.",
-                    type = "info"
-                })
-                startDeliveryJob(currentRoute)
+        -- Restore locations from indices
+        if allLocations[jobData.startLocationIndex] and allLocations[jobData.endLocationIndex] then
+            startLocation = allLocations[jobData.startLocationIndex].coords
+            endLocation = allLocations[jobData.endLocationIndex].coords
+            jobTimer = jobData.jobTimer
+            
+            -- Restore boat entity if it exists
+            if jobData.boatNetId then
+                local boatEntity = NetworkGetEntityFromNetworkId(jobData.boatNetId)
+                if DoesEntityExist(boatEntity) then
+                    -- Save the current boat entity
+                    currentBoat = boatEntity
+                    
+                    -- Teleport player to boat
+                    local playerPed = PlayerPedId()
+                    SetEntityCoords(playerPed, startLocation.x, startLocation.y, startLocation.z + 1.0)
+                    TaskWarpPedIntoVehicle(playerPed, boatEntity, -1)
+                    
+                    lib.notify({
+                        title = "Job Restored",
+                        description = "Your delivery job has been restored.",
+                        type = "success"
+                    })
+                else
+                    -- Boat doesn't exist anymore, restart the job
+                    lib.notify({
+                        title = "Job Restarted",
+                        description = "Your delivery boat was lost, spawning a new one.",
+                        type = "info"
+                    })
+                    startDeliveryJob(currentRoute)
+                end
             end
-        }
+        else
+            -- Something went wrong with the location data, reset the job
+            lib.notify({
+                title = "Job Error",
+                description = "Couldn't restore delivery locations. Starting a new job.",
+                type = "error"
+            })
+            
+            isOnJob = false
+        end
     end
 end)
 
