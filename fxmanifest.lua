@@ -1,9 +1,9 @@
 fx_version 'cerulean'
 game 'gta5'
 
-author 'Your Name'
-description 'Cargo Delivery Job'
-version '1.0.0'
+author 'DaemonAlex'
+description 'Ocean Delivery - Boat Cargo Delivery Job'
+version '1.1.0'
 
 shared_scripts {
     'config.lua',
@@ -22,6 +22,13 @@ client_scripts {
 dependencies {
     'qb-core',
     'ox_lib',
-    'ox_target',
     'oxmysql'
 }
+
+optional_dependencies {
+    'ox_target',  -- Enhanced interaction
+    'qs-banking', -- Banking option 1
+    'renewed-banking' -- Banking option 2
+}
+
+lua54 'yes' -- Enable Lua 5.4 features
