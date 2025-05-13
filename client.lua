@@ -99,37 +99,26 @@ local function spawnPallet()
     })
 end
 
-    -- Start job timer
-    jobTimer = GetGameTimer() + 15 * 60 * 1000 -- 15 minutes
-end
-
-local function endDeliveryJob()
-    -- Code to end the delivery job
-    if palletProp then
-        DeleteObject(palletProp)
-        palletProp = nil
-    end
-    if forklift then
-        DeleteVehicle(forklift)
-        forklift = nil
-        forkliftSpawnLocation = nil
-    end
-if deliverySitePalletProp then
-    DeleteObject(deliverySitePalletProp)
-    deliverySitePalletProp = nil
-end
-    currentRoute = nil
+local function startDeliveryJob(route)
+    -- Code to start the delivery job
+    spawnBoat(route)
+    spawnPallet()
+    deliveryCount = deliveryCount + 1
+    currentRoute = route
     palletDelivered = false
-    jobTimer = nil
-    deliverySiteTimer = nil
-    startLocation = nil
-    endLocation = nil
+
+    -- Set waypoints based on the selected route
+    endLocation = getRandomLocation()
+    SetNewWaypoint(endLocation.x, endLocation.y)
 
     lib.notify({
-        title = "Delivery Job Ended",
-        description = "The delivery job has ended.",
-        type = "error"
+        title = "Delivery Job Started",
+        description = "Follow the waypoint to complete the delivery.",
+        type = "success"
     })
+
+    -- Start job timer
+    jobTimer = GetGameTimer() + 15 * 60 * 1000 -- 15 minutes
 end
 
 local function spawnDeliverySitePallet()
@@ -159,10 +148,44 @@ local function spawnDeliverySitePallet()
     SetNewWaypoint(spawnLocation.x, spawnLocation.y)
 end
 
+local function startDeliverySiteJob()
+    -- Code to start the delivery site job
+    spawnDeliverySitePallet()
+    deliverySiteTimer = GetGameTimer() + 15 * 60 * 1000 -- 15 minutes
+
     lib.notify({
         title = "Delivery Site Job Started",
         description = "Move the pallets off the boat and into the delivery site.",
         type = "success"
+    })
+end
+
+local function endDeliveryJob()
+    -- Code to end the delivery job
+    if palletProp then
+        DeleteObject(palletProp)
+        palletProp = nil
+    end
+    if forklift then
+        DeleteVehicle(forklift)
+        forklift = nil
+        forkliftSpawnLocation = nil
+    end
+    if deliverySitePalletProp then
+        DeleteObject(deliverySitePalletProp)
+        deliverySitePalletProp = nil
+    end
+    currentRoute = nil
+    palletDelivered = false
+    jobTimer = nil
+    deliverySiteTimer = nil
+    startLocation = nil
+    endLocation = nil
+
+    lib.notify({
+        title = "Delivery Job Ended",
+        description = "The delivery job has ended.",
+        type = "error"
     })
 end
 
