@@ -50,6 +50,5 @@ Config.CustomLocations = {}
 
 -- Function to save locations to database (called from server)
 function Config.SaveLocations()
-    -- This is just a placeholder - the actual implementation is in server.lua
-    -- Will be called whenever locations are added/removed
+
 end
