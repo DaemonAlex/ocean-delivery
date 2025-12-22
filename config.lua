@@ -7,10 +7,15 @@ Config.SeriesBonus = 2000 -- Bonus payout for completing a series of 4 deliverie
 Config.JobStartCost = 0 -- Cost to start a delivery job, set to 0 for free jobs
 
 -- Default ports and locations. Add as many locations as you wish.
+Config.Ports = {
     {name = "Los Santos Marina", coords = vector3(-802.0, -1496.0, 0.0)},
     {name = "Paleto Bay Pier", coords = vector3(-275.0, 6635.0, 0.0)},
     {name = "Vespucci Beach", coords = vector3(-1599.0, -1097.0, 0.0)},
-    {name = "NOOSE Facility", coords = vector3(3857.0, 4458.0, 0.0)}
+    {name = "NOOSE Facility", coords = vector3(3857.0, 4458.0, 0.0)},
+    {name = "Elysian Island Docks", coords = vector3(-163.0, -2378.0, 0.0)},
+    {name = "Del Perro Pier", coords = vector3(-1619.0, -1015.0, 0.0)},
+    {name = "Chumash Pier", coords = vector3(-3426.0, 967.0, 0.0)},
+    {name = "Galilee Marina", coords = vector3(1299.0, 4216.0, 0.0)}
 }
 
 -- Define the boats that can be used for deliveries
