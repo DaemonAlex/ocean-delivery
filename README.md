@@ -210,4 +210,3 @@ MIT License - See LICENSE file for details.
 ## Credits
 
 - Original concept by DaemonAlex
-- Enhanced by Claude AI
