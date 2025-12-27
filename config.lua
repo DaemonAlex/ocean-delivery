@@ -239,7 +239,7 @@ Config.Boats = {
     },
     {
         label = "Urchin II Mega Freighter",
-        model = "urchin2",
+        model = "urchin",
         tier = 3,
         speed = 20,
         capacity = 16,

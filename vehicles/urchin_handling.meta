@@ -7,7 +7,7 @@
 <CHandlingDataMgr>
   <HandlingData>
     <Item type="CBoatHandlingData">
-      <handlingName>urchin2</handlingName>
+      <handlingName>urchin</handlingName>
       <fMass value="45000.000000" />
       <fInitialDragCoeff value="2.200000" />
       <fPercentSubmerged value="90.000000" />
