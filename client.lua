@@ -924,6 +924,25 @@ RegisterNetEvent('cargo:showLocationsList', function(locations)
     lib.showContext('delivery_locations_list')
 end)
 
+-- Starter boat granted notification
+RegisterNetEvent('cargo:starterBoatGranted', function(data)
+    lib.notify({
+        title = "FREE BOAT!",
+        description = data.message or "You received a free starter boat!",
+        type = "success",
+        duration = 8000
+    })
+
+    Wait(2000)
+
+    lib.notify({
+        title = data.name,
+        description = "Check your fleet with /fleet to see your new boat!",
+        type = "info",
+        duration = 5000
+    })
+end)
+
 -- =============================================================================
 -- FLEET MANAGEMENT UI
 -- =============================================================================
@@ -931,27 +950,52 @@ end)
 local function showFleetManagement()
     QBCore.Functions.TriggerCallback('cargo:getPlayerFleet', function(fleet)
         if not fleet or #fleet == 0 then
-            lib.registerContext({
-                id = 'ocean_fleet_empty',
-                title = 'My Fleet',
-                options = {
+            -- Check if eligible for free starter boat
+            QBCore.Functions.TriggerCallback('cargo:checkStarterBoatEligible', function(eligible, starterConfig)
+                local options = {
                     {
                         title = 'No Boats Owned',
-                        description = 'Visit a marina to purchase your first boat!',
+                        description = 'Get a boat to start making deliveries!',
                         icon = 'ship',
                         disabled = true
                     },
-                    {
-                        title = 'Buy a Boat',
-                        description = 'Browse boats for sale',
-                        icon = 'shopping-cart',
-                        onSelect = function()
-                            showBoatShop()
-                        end
-                    }
                 }
-            })
-            lib.showContext('ocean_fleet_empty')
+
+                -- Show claim free boat option if eligible
+                if eligible and starterConfig then
+                    table.insert(options, {
+                        title = 'Claim FREE Starter Boat!',
+                        description = starterConfig.name .. ' - Start earning today!',
+                        icon = 'gift',
+                        iconColor = 'green',
+                        onSelect = function()
+                            QBCore.Functions.TriggerCallback('cargo:claimStarterBoat', function(success, message)
+                                lib.notify({ title = success and "Boat Claimed!" or "Error", description = message, type = success and "success" or "error" })
+                                if success then
+                                    Wait(500)
+                                    showFleetManagement()
+                                end
+                            end)
+                        end
+                    })
+                end
+
+                table.insert(options, {
+                    title = 'Buy a Boat',
+                    description = 'Browse boats for sale',
+                    icon = 'shopping-cart',
+                    onSelect = function()
+                        showBoatShop()
+                    end
+                })
+
+                lib.registerContext({
+                    id = 'ocean_fleet_empty',
+                    title = 'My Fleet',
+                    options = options
+                })
+                lib.showContext('ocean_fleet_empty')
+            end)
             return
         end
 
@@ -961,11 +1005,15 @@ local function showFleetManagement()
             local conditionColor = ship.condition_percent >= 75 and 'green' or (ship.condition_percent >= 50 and 'yellow' or 'red')
             local insuredText = ship.insured == 1 and 'Insured' or 'Not Insured'
 
+            -- Add starter boat badge
+            local titlePrefix = ship.isStarter and '[FREE] ' or ''
+            local starterDesc = ship.isStarter and ' | Starter Boat' or ''
+
             table.insert(options, {
-                title = ship.boat_name or ship.label,
-                description = string.format("Tier %d | Condition: %.0f%% | %s", ship.tier or 1, ship.condition_percent, insuredText),
-                icon = 'ship',
-                iconColor = conditionColor,
+                title = titlePrefix .. (ship.boat_name or ship.label),
+                description = string.format("Tier %d | Condition: %.0f%% | %s%s", ship.tier or 1, ship.condition_percent, insuredText, starterDesc),
+                icon = ship.isStarter and 'gift' or 'ship',
+                iconColor = ship.isStarter and 'cyan' or conditionColor,
                 metadata = {
                     { label = 'Fuel', value = string.format("%.0f%%", ship.fuel_level) },
                     { label = 'Deliveries', value = ship.total_deliveries },
@@ -998,12 +1046,20 @@ end
 
 local function showBoatDetails(ship)
     local boatData = Config.GetBoatByModel(ship.boat_model)
-    local sellPrice = math.floor((boatData and boatData.price or ship.purchase_price) * Config.FleetOwnership.sellBackPercent * (ship.condition_percent / 100))
+    local basePrice = boatData and boatData.price or ship.purchase_price
+    local sellPrice = math.floor(basePrice * Config.FleetOwnership.sellBackPercent * (ship.condition_percent / 100))
+
+    -- Starter boats have no resale value
+    if ship.isStarter then
+        sellPrice = 0
+    end
+
+    local titleSuffix = ship.isStarter and ' [FREE STARTER]' or ''
 
     local options = {
         {
             title = 'Boat Stats',
-            description = ship.description or 'No description',
+            description = ship.description or (ship.isStarter and 'Your free starter boat to begin your delivery career!' or 'No description'),
             icon = 'info-circle',
             metadata = {
                 { label = 'Speed', value = (boatData and boatData.speed or '?') .. ' knots' },
@@ -1014,9 +1070,20 @@ local function showBoatDetails(ship)
         },
     }
 
+    -- Starter boat info
+    if ship.isStarter then
+        table.insert(options, {
+            title = 'Starter Boat',
+            description = 'This is your free starter boat. Use it to earn money for upgrades!',
+            icon = 'gift',
+            iconColor = 'cyan',
+            disabled = true
+        })
+    end
+
     -- Repair option
     if ship.condition_percent < 100 then
-        local repairCost = math.floor((boatData and boatData.price or ship.purchase_price) * Config.FleetOwnership.repairCostMultiplier * ((100 - ship.condition_percent) / 100))
+        local repairCost = math.floor(basePrice * Config.FleetOwnership.repairCostMultiplier * ((100 - ship.condition_percent) / 100))
         table.insert(options, {
             title = 'Repair Boat',
             description = string.format("Restore to 100%% condition - $%s", formatNumber(repairCost)),
@@ -1033,7 +1100,7 @@ local function showBoatDetails(ship)
 
     -- Insurance option
     if ship.insured ~= 1 then
-        local insuranceCost = boatData and boatData.insurance or math.floor(ship.purchase_price * 0.05)
+        local insuranceCost = boatData and boatData.insurance or math.floor(basePrice * 0.05)
         table.insert(options, {
             title = 'Add Insurance',
             description = string.format("Protect your investment - $%s", formatNumber(insuranceCost)),
@@ -1048,27 +1115,37 @@ local function showBoatDetails(ship)
         })
     end
 
-    -- Sell option
-    table.insert(options, {
-        title = 'Sell Boat',
-        description = string.format("Sell for $%s (%.0f%% of value)", formatNumber(sellPrice), Config.FleetOwnership.sellBackPercent * 100),
-        icon = 'dollar-sign',
-        iconColor = 'red',
-        onSelect = function()
-            local confirm = lib.alertDialog({
-                header = 'Confirm Sale',
-                content = 'Are you sure you want to sell ' .. (ship.boat_name or ship.label) .. ' for $' .. formatNumber(sellPrice) .. '?',
-                centered = true,
-                cancel = true
-            })
-            if confirm == 'confirm' then
-                QBCore.Functions.TriggerCallback('cargo:sellBoat', function(success, message)
-                    lib.notify({ title = success and "Sold" or "Error", description = message, type = success and "success" or "error" })
-                    if success then showFleetManagement() end
-                end, ship.id)
+    -- Sell option (not available for starter boats)
+    if ship.isStarter and not ship.canSell then
+        table.insert(options, {
+            title = 'Cannot Sell',
+            description = 'Starter boats cannot be sold - they\'re a gift!',
+            icon = 'ban',
+            iconColor = 'gray',
+            disabled = true
+        })
+    else
+        table.insert(options, {
+            title = 'Sell Boat',
+            description = string.format("Sell for $%s (%.0f%% of value)", formatNumber(sellPrice), Config.FleetOwnership.sellBackPercent * 100),
+            icon = 'dollar-sign',
+            iconColor = 'red',
+            onSelect = function()
+                local confirm = lib.alertDialog({
+                    header = 'Confirm Sale',
+                    content = 'Are you sure you want to sell ' .. (ship.boat_name or ship.label) .. ' for $' .. formatNumber(sellPrice) .. '?',
+                    centered = true,
+                    cancel = true
+                })
+                if confirm == 'confirm' then
+                    QBCore.Functions.TriggerCallback('cargo:sellBoat', function(success, message)
+                        lib.notify({ title = success and "Sold" or "Error", description = message, type = success and "success" or "error" })
+                        if success then showFleetManagement() end
+                    end, ship.id)
+                end
             end
-        end
-    })
+        })
+    end
 
     -- Back button
     table.insert(options, {
@@ -1081,7 +1158,7 @@ local function showBoatDetails(ship)
 
     lib.registerContext({
         id = 'ocean_boat_details',
-        title = ship.boat_name or ship.label,
+        title = (ship.boat_name or ship.label) .. titleSuffix,
         options = options
     })
 

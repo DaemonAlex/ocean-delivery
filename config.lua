@@ -79,22 +79,23 @@ Config.Boats = {
         handling = 1.0,
         fuelEfficiency = 1.0,
         description = "Standard coastal fishing boat. Reliable and steady.",
-        price = 10000,
-        insurance = 500,
-        maintenance = 100,
+        price = 35000,
+        insurance = 1750,
+        maintenance = 250,
     },
     {
-        label = "Coastal II",
+        label = "Coastal II Premium",
         model = "costal2",
-        tier = 1,
-        speed = 70,
-        capacity = 2,
-        handling = 0.95,
-        fuelEfficiency = 0.9,
-        description = "Upgraded coastal boat. Faster with better cargo space.",
-        price = 18000,
-        insurance = 900,
-        maintenance = 150,
+        tier = 2,
+        speed = 85,
+        capacity = 6,
+        handling = 0.85,
+        fuelEfficiency = 0.75,
+        requiredLevel = 5,
+        description = "Premium cargo vessel. Massive hold, powerful engine, built for serious haulers.",
+        price = 450000,
+        insurance = 22500,
+        maintenance = 3000,
     },
     {
         label = "Dinghy",
@@ -105,9 +106,9 @@ Config.Boats = {
         handling = 1.0,
         fuelEfficiency = 1.2,
         description = "Basic inflatable boat. Light and agile.",
-        price = 5000,
-        insurance = 250,
-        maintenance = 50,
+        price = 15000,
+        insurance = 750,
+        maintenance = 100,
     },
     {
         label = "Suntrap",
@@ -118,9 +119,9 @@ Config.Boats = {
         handling = 1.1,
         fuelEfficiency = 1.0,
         description = "Small recreational boat. Good visibility.",
-        price = 8000,
-        insurance = 400,
-        maintenance = 75,
+        price = 25000,
+        insurance = 1250,
+        maintenance = 175,
     },
     {
         label = "Speeder",
@@ -131,9 +132,9 @@ Config.Boats = {
         handling = 0.9,
         fuelEfficiency = 0.8,
         description = "Fast speedboat. Burns fuel quickly.",
-        price = 15000,
-        insurance = 750,
-        maintenance = 150,
+        price = 55000,
+        insurance = 2750,
+        maintenance = 400,
     },
     {
         label = "Seashark",
@@ -144,9 +145,9 @@ Config.Boats = {
         handling = 0.85,
         fuelEfficiency = 0.7,
         description = "Personal watercraft. Very fast but unstable.",
-        price = 12000,
-        insurance = 600,
-        maintenance = 100,
+        price = 40000,
+        insurance = 2000,
+        maintenance = 300,
     },
 
     -- Tier 2: Regional (levels 4-6)
@@ -160,9 +161,9 @@ Config.Boats = {
         fuelEfficiency = 0.9,
         requiredLevel = 4,
         description = "High-performance yacht. Fast and reliable.",
-        price = 75000,
-        insurance = 3750,
-        maintenance = 500,
+        price = 225000,
+        insurance = 11250,
+        maintenance = 1500,
     },
     {
         label = "Tropic",
@@ -174,9 +175,9 @@ Config.Boats = {
         fuelEfficiency = 1.1,
         requiredLevel = 4,
         description = "Pontoon boat with cargo space.",
-        price = 45000,
-        insurance = 2250,
-        maintenance = 350,
+        price = 150000,
+        insurance = 7500,
+        maintenance = 1000,
     },
     {
         label = "Squalo",
@@ -188,9 +189,9 @@ Config.Boats = {
         fuelEfficiency = 0.85,
         requiredLevel = 5,
         description = "Sport yacht. Balance of speed and capacity.",
-        price = 95000,
-        insurance = 4750,
-        maintenance = 650,
+        price = 285000,
+        insurance = 14250,
+        maintenance = 2000,
     },
     {
         label = "Toro",
@@ -202,9 +203,9 @@ Config.Boats = {
         fuelEfficiency = 0.9,
         requiredLevel = 6,
         description = "Classic speedboat with large deck.",
-        price = 125000,
-        insurance = 6250,
-        maintenance = 800,
+        price = 375000,
+        insurance = 18750,
+        maintenance = 2500,
     },
 
     -- Tier 3: Long Haul (levels 7+)
@@ -218,9 +219,9 @@ Config.Boats = {
         fuelEfficiency = 1.0,
         requiredLevel = 7,
         description = "Luxury yacht. Slow but massive cargo space.",
-        price = 500000,
-        insurance = 25000,
-        maintenance = 3500,
+        price = 1500000,
+        insurance = 75000,
+        maintenance = 10000,
     },
     {
         label = "Tug",
@@ -232,9 +233,23 @@ Config.Boats = {
         fuelEfficiency = 0.6,
         requiredLevel = 8,
         description = "Industrial tugboat. Maximum cargo capacity.",
-        price = 750000,
-        insurance = 37500,
-        maintenance = 5000,
+        price = 2250000,
+        insurance = 112500,
+        maintenance = 15000,
+    },
+    {
+        label = "Urchin II Mega Freighter",
+        model = "urchin2",
+        tier = 3,
+        speed = 20,
+        capacity = 16,
+        handling = 0.3,
+        fuelEfficiency = 0.4,
+        requiredLevel = 10,
+        description = "Massive ocean freighter. The ultimate cargo hauler for legendary captains. Slow but unmatched capacity.",
+        price = 5000000,
+        insurance = 250000,
+        maintenance = 35000,
     },
 }
 
@@ -513,11 +528,47 @@ Config.PoliceIntegration = {
 Config.FleetOwnership = {
     enabled = true,
     maxShipsPerPlayer = 5,
-    starterBoat = "dinghy",        -- Free starter boat for new players
     sellBackPercent = 0.6,         -- Get 60% back when selling
     insurancePayoutPercent = 0.8,  -- 80% of value on insurance claim
     maintenanceInterval = 24,      -- Hours between maintenance charges
     repairCostMultiplier = 0.1,    -- 10% of boat price for full repair
+}
+
+-- =============================================================================
+-- STARTER BOAT (Free boat for new players)
+-- =============================================================================
+
+Config.StarterBoat = {
+    enabled = true,
+    model = "dinghy",              -- Free starter boat model
+    name = "Starter Dinghy",       -- Display name
+    canSell = false,               -- Can't sell the starter boat
+    canTrade = false,              -- Can't trade the starter boat
+    autoGrant = true,              -- Automatically grant on first job attempt
+    message = "Welcome to Ocean Delivery! Here's your free starter boat to get you started.",
+}
+
+-- =============================================================================
+-- FINANCING / PAYMENT PLANS
+-- =============================================================================
+
+Config.Financing = {
+    enabled = true,
+    downPaymentPercent = 0.20,     -- 20% down payment required
+    interestRate = 0.15,           -- 15% interest on financed amount
+    maxLoanWeeks = 8,              -- Maximum 8 weekly payments
+    minLoanWeeks = 2,              -- Minimum 2 weekly payments
+    missedPaymentPenalty = 0.10,   -- 10% penalty on missed payment
+    maxMissedPayments = 2,         -- Repo after 2 missed payments
+    paymentDay = 1,                -- Day of week (1 = Monday)
+
+    -- Loan terms available
+    terms = {
+        { weeks = 2, interestMult = 0.8 },   -- 2 weeks = lower interest
+        { weeks = 4, interestMult = 1.0 },   -- 4 weeks = standard
+        { weeks = 6, interestMult = 1.15 },  -- 6 weeks = higher interest
+        { weeks = 8, interestMult = 1.30 },  -- 8 weeks = highest interest
+    }
 }
 
 -- =============================================================================

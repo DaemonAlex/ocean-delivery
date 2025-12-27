@@ -135,6 +135,7 @@ CreateThread(function()
             total_distance FLOAT DEFAULT 0,
             purchase_price INT DEFAULT 0,
             insured BOOLEAN DEFAULT FALSE,
+            is_starter BOOLEAN DEFAULT FALSE,
             last_maintenance TIMESTAMP NULL,
             purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_citizenid (citizenid),
@@ -143,6 +144,10 @@ CreateThread(function()
     ]], {}, function(success)
         if success then
             debugPrint("Fleet ownership table initialized")
+            -- Add is_starter column if it doesn't exist (for existing databases)
+            MySQL.Async.execute([[
+                ALTER TABLE ocean_delivery_fleet ADD COLUMN IF NOT EXISTS is_starter BOOLEAN DEFAULT FALSE
+            ]], {})
         end
     end)
 
@@ -181,6 +186,37 @@ CreateThread(function()
     ]], {}, function(success)
         if success then
             debugPrint("Encounters log table initialized")
+        end
+    end)
+
+    -- Boat loans/financing table
+    MySQL.Async.execute([[
+        CREATE TABLE IF NOT EXISTS ocean_delivery_loans (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            citizenid VARCHAR(50) NOT NULL,
+            fleet_id INT NOT NULL,
+            boat_model VARCHAR(50) NOT NULL,
+            total_amount INT NOT NULL,
+            down_payment INT NOT NULL,
+            financed_amount INT NOT NULL,
+            interest_rate FLOAT NOT NULL,
+            weekly_payment INT NOT NULL,
+            weeks_total INT NOT NULL,
+            weeks_paid INT DEFAULT 0,
+            amount_paid INT DEFAULT 0,
+            amount_remaining INT NOT NULL,
+            missed_payments INT DEFAULT 0,
+            status ENUM('active', 'paid', 'defaulted', 'repossessed') DEFAULT 'active',
+            next_payment_due TIMESTAMP NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            paid_off_at TIMESTAMP NULL,
+            INDEX idx_citizenid (citizenid),
+            INDEX idx_fleet (fleet_id),
+            INDEX idx_status (status)
+        )
+    ]], {}, function(success)
+        if success then
+            debugPrint("Boat loans table initialized")
         end
     end)
 end)
@@ -304,6 +340,67 @@ local function DeductXP(citizenid, amount, reason)
     debugPrint(citizenid .. " lost " .. amount .. " XP (" .. reason .. "). Total: " .. stats.xp)
 
     return stats.xp
+end
+
+-- =============================================================================
+-- STARTER BOAT FUNCTIONS
+-- =============================================================================
+
+-- Check if player has any boats (including starter)
+local function PlayerHasBoats(citizenid)
+    local count = MySQL.Sync.fetchScalar([[
+        SELECT COUNT(*) FROM ocean_delivery_fleet WHERE citizenid = ?
+    ]], {citizenid})
+    return count and count > 0
+end
+
+-- Check if player already has a starter boat
+local function PlayerHasStarterBoat(citizenid)
+    local count = MySQL.Sync.fetchScalar([[
+        SELECT COUNT(*) FROM ocean_delivery_fleet WHERE citizenid = ? AND is_starter = TRUE
+    ]], {citizenid})
+    return count and count > 0
+end
+
+-- Grant starter boat to player
+local function GrantStarterBoat(citizenid, src)
+    if not Config.StarterBoat.enabled then
+        return false, "Starter boats are disabled"
+    end
+
+    -- Check if player already has a starter boat
+    if PlayerHasStarterBoat(citizenid) then
+        return false, "You already have a starter boat"
+    end
+
+    local boatModel = Config.StarterBoat.model
+    local boatName = Config.StarterBoat.name
+    local boatData = Config.GetBoatByModel(boatModel)
+
+    if not boatData then
+        debugPrint("ERROR: Starter boat model '" .. boatModel .. "' not found in Config.Boats")
+        return false, "Invalid starter boat configuration"
+    end
+
+    -- Add starter boat to fleet (free, no cost)
+    MySQL.Async.execute([[
+        INSERT INTO ocean_delivery_fleet (citizenid, boat_model, boat_name, purchase_price, is_starter)
+        VALUES (?, ?, ?, 0, TRUE)
+    ]], {citizenid, boatModel, boatName}, function(rowsChanged)
+        if rowsChanged > 0 then
+            debugPrint(citizenid .. " received free starter boat: " .. boatName)
+
+            if src then
+                TriggerClientEvent('cargo:starterBoatGranted', src, {
+                    model = boatModel,
+                    name = boatName,
+                    message = Config.StarterBoat.message
+                })
+            end
+        end
+    end)
+
+    return true, "Starter boat granted!"
 end
 
 -- =============================================================================
@@ -763,6 +860,13 @@ RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
         Wait(1000)
         TriggerClientEvent('cargo:syncLocations', src, Config.AllLocations)
 
+        -- Check for starter boat (auto-grant if enabled and player has no boats)
+        if Config.StarterBoat.enabled and Config.StarterBoat.autoGrant then
+            if not PlayerHasBoats(citizenid) then
+                GrantStarterBoat(citizenid, src)
+            end
+        end
+
         -- Restore active job if exists
         if activeJobs[citizenid] then
             Wait(2000)
@@ -944,7 +1048,7 @@ QBCore.Functions.CreateCallback('cargo:getPlayerFleet', function(source, cb)
         local citizenid = Player.PlayerData.citizenid
 
         local fleet = MySQL.Sync.fetchAll([[
-            SELECT * FROM ocean_delivery_fleet WHERE citizenid = ? ORDER BY purchased_at DESC
+            SELECT * FROM ocean_delivery_fleet WHERE citizenid = ? ORDER BY is_starter DESC, purchased_at DESC
         ]], {citizenid})
 
         -- Enhance with config data
@@ -958,6 +1062,15 @@ QBCore.Functions.CreateCallback('cargo:getPlayerFleet', function(source, cb)
                 fleet[i].description = boatData.description
                 fleet[i].maintenance = boatData.maintenance
                 fleet[i].insurance_cost = boatData.insurance
+            end
+
+            -- Mark if it's a starter boat
+            fleet[i].isStarter = ship.is_starter == 1
+            if fleet[i].isStarter then
+                fleet[i].label = Config.StarterBoat.name or "Starter Boat"
+                fleet[i].canSell = Config.StarterBoat.canSell or false
+            else
+                fleet[i].canSell = true
             end
         end
 
@@ -1052,17 +1165,31 @@ QBCore.Functions.CreateCallback('cargo:sellBoat', function(source, cb, fleetId)
     end
 
     boat = boat[1]
+
+    -- Check if it's a starter boat
+    if boat.is_starter == 1 and not Config.StarterBoat.canSell then
+        cb(false, "You cannot sell your starter boat. It's a gift!")
+        return
+    end
+
     local boatData = Config.GetBoatByModel(boat.boat_model)
     local basePrice = boatData and boatData.price or boat.purchase_price
     local conditionMultiplier = boat.condition_percent / 100
     local sellPrice = math.floor(basePrice * Config.FleetOwnership.sellBackPercent * conditionMultiplier)
+
+    -- Starter boats have no resale value
+    if boat.is_starter == 1 then
+        sellPrice = 0
+    end
 
     -- Delete boat and give money
     MySQL.Async.execute([[
         DELETE FROM ocean_delivery_fleet WHERE id = ?
     ]], {fleetId}, function(rowsChanged)
         if rowsChanged > 0 then
-            Player.Functions.AddMoney('bank', sellPrice, "Boat sale: " .. (boatData and boatData.label or boat.boat_model))
+            if sellPrice > 0 then
+                Player.Functions.AddMoney('bank', sellPrice, "Boat sale: " .. (boatData and boatData.label or boat.boat_model))
+            end
             debugPrint(citizenid .. " sold boat ID " .. fleetId .. " for $" .. sellPrice)
             cb(true, "Sold for $" .. sellPrice)
         else
@@ -1174,6 +1301,52 @@ QBCore.Functions.CreateCallback('cargo:insureBoat', function(source, cb, fleetId
     cb(true, "Boat insured for $" .. insuranceCost)
 end)
 
+-- Claim starter boat manually
+QBCore.Functions.CreateCallback('cargo:claimStarterBoat', function(source, cb)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then
+        cb(false, "Player not found")
+        return
+    end
+
+    local citizenid = Player.PlayerData.citizenid
+
+    if not Config.StarterBoat.enabled then
+        cb(false, "Starter boats are not available")
+        return
+    end
+
+    -- Check if player already has boats
+    if PlayerHasBoats(citizenid) then
+        cb(false, "You already have a boat in your fleet!")
+        return
+    end
+
+    local success, message = GrantStarterBoat(citizenid, src)
+    cb(success, message)
+end)
+
+-- Check if player is eligible for starter boat
+QBCore.Functions.CreateCallback('cargo:checkStarterBoatEligible', function(source, cb)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then
+        cb(false, nil)
+        return
+    end
+
+    local citizenid = Player.PlayerData.citizenid
+
+    if not Config.StarterBoat.enabled then
+        cb(false, nil)
+        return
+    end
+
+    local hasBoats = PlayerHasBoats(citizenid)
+    cb(not hasBoats, Config.StarterBoat)
+end)
+
 -- Get boats available for purchase
 QBCore.Functions.CreateCallback('cargo:getBoatsForSale', function(source, cb)
     local src = source
@@ -1220,6 +1393,260 @@ QBCore.Functions.CreateCallback('cargo:getBoatsForSale', function(source, cb)
     else
         cb({}, 1)
     end
+end)
+
+-- =============================================================================
+-- FINANCING CALLBACKS
+-- =============================================================================
+
+-- Get player's active loans
+QBCore.Functions.CreateCallback('cargo:getPlayerLoans', function(source, cb)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if Player then
+        local citizenid = Player.PlayerData.citizenid
+
+        local loans = MySQL.Sync.fetchAll([[
+            SELECT l.*, f.boat_name FROM ocean_delivery_loans l
+            LEFT JOIN ocean_delivery_fleet f ON l.fleet_id = f.id
+            WHERE l.citizenid = ? AND l.status = 'active'
+            ORDER BY l.next_payment_due ASC
+        ]], {citizenid})
+
+        -- Enhance with boat data
+        for i, loan in ipairs(loans) do
+            local boatData = Config.GetBoatByModel(loan.boat_model)
+            if boatData then
+                loans[i].boat_label = boatData.label
+            end
+        end
+
+        cb(loans)
+    else
+        cb({})
+    end
+end)
+
+-- Finance a boat purchase
+QBCore.Functions.CreateCallback('cargo:financeBoat', function(source, cb, boatModel, boatName, weeks)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then
+        cb(false, "Player not found")
+        return
+    end
+
+    if not Config.Financing.enabled then
+        cb(false, "Financing is not available")
+        return
+    end
+
+    local citizenid = Player.PlayerData.citizenid
+    local boatData = Config.GetBoatByModel(boatModel)
+
+    if not boatData then
+        cb(false, "Invalid boat model")
+        return
+    end
+
+    -- Check player level
+    if not playerStats[citizenid] then
+        LoadPlayerStats(citizenid)
+    end
+    local stats = playerStats[citizenid]
+
+    if boatData.requiredLevel and stats.level < boatData.requiredLevel then
+        cb(false, "You need level " .. boatData.requiredLevel .. " to buy this boat")
+        return
+    end
+
+    -- Check fleet limit
+    local fleetCount = MySQL.Sync.fetchScalar([[
+        SELECT COUNT(*) FROM ocean_delivery_fleet WHERE citizenid = ?
+    ]], {citizenid})
+
+    if fleetCount >= Config.FleetOwnership.maxShipsPerPlayer then
+        cb(false, "You've reached the maximum fleet size")
+        return
+    end
+
+    -- Check for existing active loans (limit to 2)
+    local activeLoans = MySQL.Sync.fetchScalar([[
+        SELECT COUNT(*) FROM ocean_delivery_loans WHERE citizenid = ? AND status = 'active'
+    ]], {citizenid})
+
+    if activeLoans >= 2 then
+        cb(false, "You already have 2 active loans. Pay one off first.")
+        return
+    end
+
+    -- Calculate financing
+    local price = boatData.price
+    local downPayment = math.floor(price * Config.Financing.downPaymentPercent)
+
+    -- Find interest multiplier for term
+    local interestMult = 1.0
+    for _, term in ipairs(Config.Financing.terms) do
+        if term.weeks == weeks then
+            interestMult = term.interestMult
+            break
+        end
+    end
+
+    local financedAmount = price - downPayment
+    local interest = math.floor(financedAmount * Config.Financing.interestRate * interestMult)
+    local totalFinanced = financedAmount + interest
+    local weeklyPayment = math.ceil(totalFinanced / weeks)
+
+    -- Check if player has down payment
+    if Player.PlayerData.money.bank < downPayment then
+        cb(false, "You need $" .. downPayment .. " for the down payment")
+        return
+    end
+
+    -- Process down payment
+    Player.Functions.RemoveMoney('bank', downPayment, "Boat down payment: " .. boatData.label)
+
+    -- Add boat to fleet
+    MySQL.Async.execute([[
+        INSERT INTO ocean_delivery_fleet (citizenid, boat_model, boat_name, purchase_price)
+        VALUES (?, ?, ?, ?)
+    ]], {citizenid, boatModel, boatName or boatData.label, price}, function(rowsChanged)
+        if rowsChanged > 0 then
+            -- Get the fleet ID
+            local fleetId = MySQL.Sync.fetchScalar([[
+                SELECT id FROM ocean_delivery_fleet WHERE citizenid = ? ORDER BY id DESC LIMIT 1
+            ]], {citizenid})
+
+            -- Create loan record
+            MySQL.Async.execute([[
+                INSERT INTO ocean_delivery_loans
+                (citizenid, fleet_id, boat_model, total_amount, down_payment, financed_amount,
+                 interest_rate, weekly_payment, weeks_total, amount_remaining, next_payment_due)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
+            ]], {
+                citizenid, fleetId, boatModel, price, downPayment, totalFinanced,
+                Config.Financing.interestRate * interestMult, weeklyPayment, weeks, totalFinanced
+            })
+
+            debugPrint(citizenid .. " financed " .. boatData.label .. " - Down: $" .. downPayment .. ", Weekly: $" .. weeklyPayment .. " x " .. weeks)
+
+            cb(true, "Boat financed! Down payment: $" .. downPayment .. ". Weekly payment: $" .. weeklyPayment, {
+                downPayment = downPayment,
+                weeklyPayment = weeklyPayment,
+                weeks = weeks,
+                totalFinanced = totalFinanced
+            })
+        else
+            Player.Functions.AddMoney('bank', downPayment, "Refund: Financing failed")
+            cb(false, "Failed to complete financing")
+        end
+    end)
+end)
+
+-- Make a loan payment
+QBCore.Functions.CreateCallback('cargo:makeLoanPayment', function(source, cb, loanId, payExtra)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then
+        cb(false, "Player not found")
+        return
+    end
+
+    local citizenid = Player.PlayerData.citizenid
+
+    -- Get loan info
+    local loan = MySQL.Sync.fetchAll([[
+        SELECT * FROM ocean_delivery_loans WHERE id = ? AND citizenid = ? AND status = 'active'
+    ]], {loanId, citizenid})
+
+    if not loan or #loan == 0 then
+        cb(false, "Loan not found")
+        return
+    end
+
+    loan = loan[1]
+
+    local paymentAmount = payExtra and loan.amount_remaining or loan.weekly_payment
+    paymentAmount = math.min(paymentAmount, loan.amount_remaining)
+
+    if Player.PlayerData.money.bank < paymentAmount then
+        cb(false, "You need $" .. paymentAmount .. " to make this payment")
+        return
+    end
+
+    Player.Functions.RemoveMoney('bank', paymentAmount, "Boat loan payment")
+
+    local newAmountPaid = loan.amount_paid + paymentAmount
+    local newAmountRemaining = loan.amount_remaining - paymentAmount
+    local newWeeksPaid = loan.weeks_paid + 1
+
+    if newAmountRemaining <= 0 then
+        -- Loan paid off!
+        MySQL.Async.execute([[
+            UPDATE ocean_delivery_loans SET
+                amount_paid = ?, amount_remaining = 0, weeks_paid = ?,
+                status = 'paid', paid_off_at = NOW()
+            WHERE id = ?
+        ]], {newAmountPaid, newWeeksPaid, loanId})
+
+        debugPrint(citizenid .. " paid off loan #" .. loanId)
+        cb(true, "Loan paid off! The boat is now fully yours!", { paidOff = true })
+    else
+        -- Regular payment
+        MySQL.Async.execute([[
+            UPDATE ocean_delivery_loans SET
+                amount_paid = ?, amount_remaining = ?, weeks_paid = ?,
+                missed_payments = 0, next_payment_due = DATE_ADD(NOW(), INTERVAL 7 DAY)
+            WHERE id = ?
+        ]], {newAmountPaid, newAmountRemaining, newWeeksPaid, loanId})
+
+        cb(true, "Payment of $" .. paymentAmount .. " received. Remaining: $" .. newAmountRemaining, {
+            paidOff = false,
+            remaining = newAmountRemaining,
+            weeksLeft = loan.weeks_total - newWeeksPaid
+        })
+    end
+end)
+
+-- Pay off entire loan
+QBCore.Functions.CreateCallback('cargo:payoffLoan', function(source, cb, loanId)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then
+        cb(false, "Player not found")
+        return
+    end
+
+    local citizenid = Player.PlayerData.citizenid
+
+    local loan = MySQL.Sync.fetchAll([[
+        SELECT * FROM ocean_delivery_loans WHERE id = ? AND citizenid = ? AND status = 'active'
+    ]], {loanId, citizenid})
+
+    if not loan or #loan == 0 then
+        cb(false, "Loan not found")
+        return
+    end
+
+    loan = loan[1]
+
+    if Player.PlayerData.money.bank < loan.amount_remaining then
+        cb(false, "You need $" .. loan.amount_remaining .. " to pay off this loan")
+        return
+    end
+
+    Player.Functions.RemoveMoney('bank', loan.amount_remaining, "Boat loan payoff")
+
+    MySQL.Async.execute([[
+        UPDATE ocean_delivery_loans SET
+            amount_paid = total_amount, amount_remaining = 0,
+            status = 'paid', paid_off_at = NOW()
+        WHERE id = ?
+    ]], {loanId})
+
+    debugPrint(citizenid .. " paid off loan #" .. loanId .. " early for $" .. loan.amount_remaining)
+    cb(true, "Loan paid off for $" .. loan.amount_remaining .. "! The boat is fully yours!")
 end)
 
 -- =============================================================================
