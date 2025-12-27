@@ -71,6 +71,32 @@ Config.ShipTiers = {
 Config.Boats = {
     -- Tier 1: Coastal (levels 1-3)
     {
+        label = "Coastal",
+        model = "costal",
+        tier = 1,
+        speed = 65,
+        capacity = 2,
+        handling = 1.0,
+        fuelEfficiency = 1.0,
+        description = "Standard coastal fishing boat. Reliable and steady.",
+        price = 10000,
+        insurance = 500,
+        maintenance = 100,
+    },
+    {
+        label = "Coastal II",
+        model = "costal2",
+        tier = 1,
+        speed = 70,
+        capacity = 2,
+        handling = 0.95,
+        fuelEfficiency = 0.9,
+        description = "Upgraded coastal boat. Faster with better cargo space.",
+        price = 18000,
+        insurance = 900,
+        maintenance = 150,
+    },
+    {
         label = "Dinghy",
         model = "dinghy",
         tier = 1,
