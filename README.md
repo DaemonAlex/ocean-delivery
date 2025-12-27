@@ -1,6 +1,15 @@
-# Ocean Delivery v2.0.0
+# Ocean Delivery v3.0.0
 
-An advanced boat cargo delivery job system for FiveM with a comprehensive progression system, multiple cargo types, weather effects, and fuel management.
+An advanced boat cargo delivery job system for FiveM with fleet ownership, random encounters, fuel management, and phone app integration.
+
+## What's New in v3.0.0
+
+- **Fleet Ownership** - Buy, sell, repair, and insure your own boats
+- **Random Encounters** - Pirates, Coast Guard, and rescue missions
+- **Refueling System** - Functional fuel stations at ports
+- **Phone App Integration** - Manage deliveries via lb-phone, qs-smartphone, or npwd
+- **Insurance System** - Protect your investment
+- **Maintenance Tracking** - Keep your fleet in top condition
 
 ## Features
 
@@ -9,70 +18,94 @@ An advanced boat cargo delivery job system for FiveM with a comprehensive progre
 - **3 Ship Tiers**: Coastal, Regional, Long Haul
 - **XP-based progression** with delivery bonuses
 - **Streak bonuses** for consecutive successful deliveries
-- **Series bonuses** for completing 4 deliveries in a row
 
-### Ship Tiers
+### Fleet Ownership
 
-| Tier | Name | Description | Unlocked At |
-|------|------|-------------|-------------|
-| 1 | Coastal | Small boats for local harbor runs | Level 1 |
-| 2 | Regional | Medium vessels for coastal voyages | Level 4 |
-| 3 | Long Haul | Large ships for ocean crossings | Level 7 |
+Buy and manage your own fleet of boats:
 
-### Available Ships
+| Feature | Description |
+|---------|-------------|
+| Purchase | Buy boats at any level (some require higher levels) |
+| Naming | Give your boats custom names |
+| Repair | Fix damage for a percentage of boat value |
+| Insurance | Protect against total loss (80% payout) |
+| Sell | Sell boats for 60% of value (condition affects price) |
+| Fleet Limit | Up to 5 boats per player |
 
-**Tier 1 - Coastal:**
-- Dinghy - Basic inflatable, light and agile
-- Suntrap - Recreational boat, good visibility
-- Speeder - Fast speedboat, burns fuel quickly
-- Seashark - Personal watercraft, very fast but unstable
+### Ship Pricing
 
-**Tier 2 - Regional (Level 4+):**
-- Jetmax - High-performance yacht
-- Tropic - Pontoon with cargo space
-- Squalo - Sport yacht, balanced
-- Toro - Classic speedboat with large deck
+| Tier | Ship | Price | Insurance | Maintenance |
+|------|------|-------|-----------|-------------|
+| 1 | Dinghy | $5,000 | $250 | $50/day |
+| 1 | Suntrap | $8,000 | $400 | $75/day |
+| 1 | Speeder | $15,000 | $750 | $150/day |
+| 1 | Seashark | $12,000 | $600 | $100/day |
+| 2 | Jetmax | $75,000 | $3,750 | $500/day |
+| 2 | Tropic | $45,000 | $2,250 | $350/day |
+| 2 | Squalo | $95,000 | $4,750 | $650/day |
+| 2 | Toro | $125,000 | $6,250 | $800/day |
+| 3 | Marquis | $500,000 | $25,000 | $3,500/day |
+| 3 | Tug | $750,000 | $37,500 | $5,000/day |
 
-**Tier 3 - Long Haul (Level 7+):**
-- Marquis - Luxury yacht, massive cargo space
-- Tug - Industrial tugboat, maximum capacity
+### Random Encounters
+
+During deliveries, you may encounter:
+
+| Encounter | Description | Reward |
+|-----------|-------------|--------|
+| Pirates | Hostile boats attack you | +50 XP for surviving |
+| Coast Guard | Patrol checking cargo | Escape to avoid arrest |
+| Distress Signal | Someone needs rescue | +$2,500 and +100 XP |
+| Fellow Smuggler | Trade opportunities | +$5,000 and +75 XP |
+
+Encounter chances increase with:
+- Higher tier routes
+- Illegal cargo
 
 ### Cargo Types
 
-| Cargo | Pay Mult | XP Mult | Special |
-|-------|----------|---------|---------|
-| Standard | 1.0x | 1.0x | None |
-| Electronics | 1.5x | 1.3x | Fragile |
-| Fresh Seafood | 1.4x | 1.2x | Perishable |
-| Medical Supplies | 2.0x | 1.8x | Fragile + Perishable |
-| Unmarked Crates | 3.0x | 2.0x | Illegal (Police risk) |
-| Military Hardware | 4.0x | 2.5x | Illegal + Heavy |
-| Luxury Goods | 2.5x | 1.5x | Fragile (2x damage penalty) |
-| Hazardous Materials | 3.5x | 2.0x | Fragile + Explosion risk |
+| Cargo | Pay Mult | Special Properties |
+|-------|----------|-------------------|
+| Standard | 1.0x | None |
+| Electronics | 1.5x | Fragile |
+| Fresh Seafood | 1.4x | Perishable |
+| Medical Supplies | 2.0x | Fragile + Perishable |
+| Unmarked Crates | 3.0x | Illegal (15% police chance) |
+| Military Hardware | 4.0x | Illegal (25% police chance) |
+| Luxury Goods | 2.5x | Fragile (2x damage penalty) |
+| Hazardous Materials | 3.5x | Fragile + Explosion risk |
+
+### Refueling System
+
+- **4 Fuel Stations** at major ports
+- **$3 per liter** refuel cost
+- **Blips on map** for easy location
+- Fuel consumption based on speed and ship efficiency
 
 ### Weather System
-- **Clear Skies** - Normal conditions
-- **Overcast** - Slightly reduced visibility
-- **Rain** - +10% pay bonus, reduced handling
-- **Thunderstorm** - +25% pay bonus, severe conditions
-- **Dense Fog** - +15% pay bonus, very low visibility
 
-### Fuel System
-- Ships spawn with 80% fuel
-- Different ships have different fuel efficiency
-- Fuel consumption based on speed and tier
-- Low fuel warnings at 20% and 10%
-- Out of fuel = job failed
+| Weather | Speed | Handling | Pay Bonus |
+|---------|-------|----------|-----------|
+| Clear | 100% | 100% | 0% |
+| Overcast | 100% | 100% | 0% |
+| Rain | 90% | 85% | +10% |
+| Thunderstorm | 75% | 70% | +25% |
+| Dense Fog | 85% | 95% | +15% |
 
-### Damage System
-- Cargo takes damage from boat collisions
-- Fragile cargo takes 50% more damage
-- Heavy cargo takes 20% more damage from momentum
-- Damage reduces final payout:
-  - 10% damage → 5% penalty
-  - 30% damage → 15% penalty
-  - 50% damage → 30% penalty
-  - 70%+ damage → 50% penalty
+### Phone App Integration
+
+Manage your deliveries from your phone:
+
+- **Start Job** - Begin a new delivery
+- **View Stats** - Check XP, level, earnings
+- **Manage Fleet** - View/repair your boats
+- **Check Weather** - See current bonus
+- **Find Fuel** - Locate nearest station
+
+Supports:
+- lb-phone
+- qs-smartphone
+- npwd
 
 ## Installation
 
@@ -88,11 +121,14 @@ An advanced boat cargo delivery job system for FiveM with a comprehensive progre
 
 ## Database Tables
 
-The script automatically creates these tables:
-- `ocean_delivery_players` - Player progression and stats
-- `ocean_delivery_history` - Delivery history logs
-- `cargo_locations` - Custom delivery locations
-- `cargo_deliveries` - Legacy delivery tracking
+| Table | Purpose |
+|-------|---------|
+| `ocean_delivery_players` | Player progression and stats |
+| `ocean_delivery_fleet` | Player-owned boats |
+| `ocean_delivery_history` | Delivery logs |
+| `ocean_delivery_maintenance` | Repair/insurance logs |
+| `ocean_delivery_encounters` | Encounter history |
+| `cargo_locations` | Custom delivery locations |
 
 ## Commands
 
@@ -100,43 +136,56 @@ The script automatically creates these tables:
 
 | Command | Description |
 |---------|-------------|
-| `/startdelivery` | Start a new delivery job (opens selection UI) |
-| `/enddelivery` | Cancel current delivery job |
-| `/deliverystats` | View your progression stats in a menu |
+| `/startdelivery` | Start a new delivery job |
+| `/enddelivery` | Cancel current delivery |
+| `/deliverystats` | View progression stats |
+| `/fleet` | Open fleet management menu |
+| `/buyboat` | Browse boats for sale |
+| `/refuel` | Refuel at a fuel station |
 
 ### Admin Commands
 
 | Command | Description |
 |---------|-------------|
-| `/adddeliverylocation [name] [tier] [hasFuel]` | Add location at current position |
-| `/listdeliverylocations` | View all delivery locations |
-| `/removedeliverylocation [id]` | Remove a custom location |
-| `/resetdelivery [playerID]` | Reset a player's current job |
-| `/setdeliverylevel [playerID] [level]` | Set a player's delivery level (1-10) |
+| `/adddeliverylocation [name] [tier] [fuel]` | Add location at position |
+| `/listdeliverylocations` | View all locations |
+| `/removedeliverylocation [id]` | Remove a location |
+| `/resetdelivery [playerID]` | Reset player's job |
+| `/setdeliverylevel [playerID] [level]` | Set player level |
 
 ## Configuration
 
-All configuration is in `config.lua`:
+All settings are in `config.lua`:
 
 ```lua
--- XP Settings
-Config.XPPerDelivery = 100           -- Base XP per delivery
-Config.XPPerDistance = 0.5           -- Additional XP per distance unit
-Config.XPBonusMultiplier = 1.5       -- Multiplier for bonus deliveries
+-- Fleet Ownership
+Config.FleetOwnership = {
+    enabled = true,
+    maxShipsPerPlayer = 5,
+    sellBackPercent = 0.6,         -- 60% of value
+    insurancePayoutPercent = 0.8,  -- 80% of value
+    repairCostMultiplier = 0.1,    -- 10% of boat price
+}
 
--- Payment Settings
-Config.BasePayoutPerDistance = 10    -- Base payout per distance unit
-Config.BonusPayout = 500             -- Bonus per consecutive delivery
-Config.SeriesBonus = 2000            -- Bonus for completing 4 deliveries
+-- Random Encounters
+Config.RandomEncounters = {
+    enabled = true,
+    checkInterval = 30000,         -- Every 30 seconds
+    minDistanceFromPort = 500,     -- Safety zone
+}
 
--- Time Settings
-Config.PickupTimer = 15 * 60 * 1000  -- 15 minutes to pick up
-Config.DeliveryTimer = 15 * 60 * 1000 -- 15 minutes to deliver
+-- Refueling
+Config.Refueling = {
+    enabled = true,
+    costPerLiter = 3,
+    showBlips = true,
+}
 
--- Enable/Disable Systems
-Config.WeatherEffects.enabled = true
-Config.FuelSystem.enabled = true
-Config.DamagePenalty.enabled = true
+-- Phone App
+Config.PhoneApp = {
+    enabled = true,
+    appName = "Ocean Delivery",
+}
 ```
 
 ## Dependencies
@@ -149,29 +198,39 @@ Config.DamagePenalty.enabled = true
 **Optional:**
 - ox_target (enhanced interaction)
 - qs-banking or renewed-banking (banking integration)
+- lb-phone, qs-smartphone, or npwd (phone app)
 
 ## Gameplay Flow
 
-1. **Start Job** (`/startdelivery`)
-   - Select your ship from available unlocked vessels
-   - Choose cargo type based on your tier
-   - Pick a route matching your ship's tier
+1. **Purchase a Boat** (`/buyboat` or `/fleet`)
+   - Browse available boats
+   - Higher tier boats require higher levels
+   - Name your boat
 
-2. **Pickup Phase**
-   - Teleport to start location in your ship
-   - Locate the cargo pallet (waypoint provided)
-   - Use forklift to load cargo onto boat
+2. **Start Delivery** (`/startdelivery`)
+   - Select your boat from your fleet
+   - Choose cargo type based on tier
+   - Pick a route
 
-3. **Delivery Phase**
-   - Navigate to destination port
+3. **During Delivery**
    - Manage fuel consumption
+   - Watch for random encounters
    - Avoid damage (especially with fragile cargo)
-   - Weather affects handling and visibility
 
-4. **Completion**
-   - Unload cargo at delivery site
-   - Receive payment with bonuses/penalties
-   - Earn XP toward next level
+4. **Encounters**
+   - Pirates: Fight or flee
+   - Coast Guard: Escape distance required
+   - Distress: Rescue for bonus rewards
+
+5. **Complete Delivery**
+   - Earn payment with bonuses/penalties
+   - Gain XP toward next level
+   - Boat condition may decrease
+
+6. **Maintain Fleet**
+   - Repair damaged boats
+   - Add insurance for protection
+   - Sell unused boats
 
 ## Level Progression
 
@@ -188,16 +247,36 @@ Config.DamagePenalty.enabled = true
 | 9 | Fleet Admiral | 25,000 | 3 |
 | 10 | Legendary Captain | 35,000 | 3 |
 
+## Exports
+
+```lua
+-- Get player stats
+exports['ocean-delivery']:GetPlayerStats()
+
+-- Get player fleet
+exports['ocean-delivery']:GetPlayerFleet()
+
+-- Check if on delivery job
+exports['ocean-delivery']:IsOnDeliveryJob()
+```
+
 ## Roadmap
 
-### Planned Features
-- [ ] Fleet ownership (buy/maintain multiple ships)
-- [ ] Supply/demand dynamic pricing
-- [ ] Random encounters (pirates, coast guard)
+### Completed
+- [x] Tiered progression system
+- [x] Multiple cargo types
+- [x] Weather effects
+- [x] Fuel management
+- [x] Fleet ownership
+- [x] Random encounters
+- [x] Phone app integration
+
+### Planned
 - [ ] Crew system (hire NPCs)
 - [ ] Ship customization/upgrades
-- [ ] Refueling at port fuel stations
-- [ ] Phone app integration
+- [ ] Supply/demand dynamic pricing
+- [ ] Multiplayer convoy missions
+- [ ] Achievements system
 
 ## Support
 

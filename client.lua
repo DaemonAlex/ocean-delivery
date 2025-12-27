@@ -925,11 +925,607 @@ RegisterNetEvent('cargo:showLocationsList', function(locations)
 end)
 
 -- =============================================================================
+-- FLEET MANAGEMENT UI
+-- =============================================================================
+
+local function showFleetManagement()
+    QBCore.Functions.TriggerCallback('cargo:getPlayerFleet', function(fleet)
+        if not fleet or #fleet == 0 then
+            lib.registerContext({
+                id = 'ocean_fleet_empty',
+                title = 'My Fleet',
+                options = {
+                    {
+                        title = 'No Boats Owned',
+                        description = 'Visit a marina to purchase your first boat!',
+                        icon = 'ship',
+                        disabled = true
+                    },
+                    {
+                        title = 'Buy a Boat',
+                        description = 'Browse boats for sale',
+                        icon = 'shopping-cart',
+                        onSelect = function()
+                            showBoatShop()
+                        end
+                    }
+                }
+            })
+            lib.showContext('ocean_fleet_empty')
+            return
+        end
+
+        local options = {}
+
+        for _, ship in ipairs(fleet) do
+            local conditionColor = ship.condition_percent >= 75 and 'green' or (ship.condition_percent >= 50 and 'yellow' or 'red')
+            local insuredText = ship.insured == 1 and 'Insured' or 'Not Insured'
+
+            table.insert(options, {
+                title = ship.boat_name or ship.label,
+                description = string.format("Tier %d | Condition: %.0f%% | %s", ship.tier or 1, ship.condition_percent, insuredText),
+                icon = 'ship',
+                iconColor = conditionColor,
+                metadata = {
+                    { label = 'Fuel', value = string.format("%.0f%%", ship.fuel_level) },
+                    { label = 'Deliveries', value = ship.total_deliveries },
+                    { label = 'Distance', value = string.format("%.0f km", ship.total_distance / 1000) },
+                },
+                onSelect = function()
+                    showBoatDetails(ship)
+                end
+            })
+        end
+
+        table.insert(options, {
+            title = 'Buy Another Boat',
+            description = 'Browse boats for sale',
+            icon = 'plus',
+            onSelect = function()
+                showBoatShop()
+            end
+        })
+
+        lib.registerContext({
+            id = 'ocean_fleet_list',
+            title = 'My Fleet (' .. #fleet .. '/' .. Config.FleetOwnership.maxShipsPerPlayer .. ')',
+            options = options
+        })
+
+        lib.showContext('ocean_fleet_list')
+    end)
+end
+
+local function showBoatDetails(ship)
+    local boatData = Config.GetBoatByModel(ship.boat_model)
+    local sellPrice = math.floor((boatData and boatData.price or ship.purchase_price) * Config.FleetOwnership.sellBackPercent * (ship.condition_percent / 100))
+
+    local options = {
+        {
+            title = 'Boat Stats',
+            description = ship.description or 'No description',
+            icon = 'info-circle',
+            metadata = {
+                { label = 'Speed', value = (boatData and boatData.speed or '?') .. ' knots' },
+                { label = 'Capacity', value = (boatData and boatData.capacity or '?') .. ' units' },
+                { label = 'Fuel Efficiency', value = string.format("%.0f%%", (boatData and boatData.fuelEfficiency or 1) * 100) },
+            },
+            disabled = true
+        },
+    }
+
+    -- Repair option
+    if ship.condition_percent < 100 then
+        local repairCost = math.floor((boatData and boatData.price or ship.purchase_price) * Config.FleetOwnership.repairCostMultiplier * ((100 - ship.condition_percent) / 100))
+        table.insert(options, {
+            title = 'Repair Boat',
+            description = string.format("Restore to 100%% condition - $%s", formatNumber(repairCost)),
+            icon = 'wrench',
+            iconColor = 'blue',
+            onSelect = function()
+                QBCore.Functions.TriggerCallback('cargo:repairBoat', function(success, message)
+                    lib.notify({ title = success and "Repaired" or "Error", description = message, type = success and "success" or "error" })
+                    if success then showFleetManagement() end
+                end, ship.id)
+            end
+        })
+    end
+
+    -- Insurance option
+    if ship.insured ~= 1 then
+        local insuranceCost = boatData and boatData.insurance or math.floor(ship.purchase_price * 0.05)
+        table.insert(options, {
+            title = 'Add Insurance',
+            description = string.format("Protect your investment - $%s", formatNumber(insuranceCost)),
+            icon = 'shield-alt',
+            iconColor = 'green',
+            onSelect = function()
+                QBCore.Functions.TriggerCallback('cargo:insureBoat', function(success, message)
+                    lib.notify({ title = success and "Insured" or "Error", description = message, type = success and "success" or "error" })
+                    if success then showFleetManagement() end
+                end, ship.id)
+            end
+        })
+    end
+
+    -- Sell option
+    table.insert(options, {
+        title = 'Sell Boat',
+        description = string.format("Sell for $%s (%.0f%% of value)", formatNumber(sellPrice), Config.FleetOwnership.sellBackPercent * 100),
+        icon = 'dollar-sign',
+        iconColor = 'red',
+        onSelect = function()
+            local confirm = lib.alertDialog({
+                header = 'Confirm Sale',
+                content = 'Are you sure you want to sell ' .. (ship.boat_name or ship.label) .. ' for $' .. formatNumber(sellPrice) .. '?',
+                centered = true,
+                cancel = true
+            })
+            if confirm == 'confirm' then
+                QBCore.Functions.TriggerCallback('cargo:sellBoat', function(success, message)
+                    lib.notify({ title = success and "Sold" or "Error", description = message, type = success and "success" or "error" })
+                    if success then showFleetManagement() end
+                end, ship.id)
+            end
+        end
+    })
+
+    -- Back button
+    table.insert(options, {
+        title = 'Back',
+        icon = 'arrow-left',
+        onSelect = function()
+            showFleetManagement()
+        end
+    })
+
+    lib.registerContext({
+        id = 'ocean_boat_details',
+        title = ship.boat_name or ship.label,
+        options = options
+    })
+
+    lib.showContext('ocean_boat_details')
+end
+
+local function showBoatShop()
+    QBCore.Functions.TriggerCallback('cargo:getBoatsForSale', function(boats, playerLevel)
+        if not boats or #boats == 0 then
+            lib.notify({ title = "No Boats", description = "No boats available for purchase", type = "error" })
+            return
+        end
+
+        local options = {}
+
+        for _, boat in ipairs(boats) do
+            local tierName = Config.ShipTiers[boat.tier] and Config.ShipTiers[boat.tier].name or "Unknown"
+
+            local option = {
+                title = boat.label .. ' - $' .. formatNumber(boat.price),
+                icon = boat.tier == 1 and 'sailboat' or (boat.tier == 2 and 'ship' or 'anchor'),
+                metadata = {
+                    { label = 'Tier', value = tierName },
+                    { label = 'Speed', value = boat.speed .. ' knots' },
+                    { label = 'Capacity', value = boat.capacity .. ' units' },
+                    { label = 'Maintenance', value = '$' .. formatNumber(boat.maintenance) .. '/day' },
+                },
+            }
+
+            if boat.canBuy then
+                option.description = boat.description
+                option.iconColor = 'green'
+                option.onSelect = function()
+                    local input = lib.inputDialog('Purchase ' .. boat.label, {
+                        { type = 'input', label = 'Name your boat (optional)', placeholder = boat.label }
+                    })
+                    local boatName = input and input[1] or boat.label
+                    QBCore.Functions.TriggerCallback('cargo:buyBoat', function(success, message)
+                        lib.notify({ title = success and "Purchased!" or "Error", description = message, type = success and "success" or "error" })
+                        if success then showFleetManagement() end
+                    end, boat.model, boatName)
+                end
+            else
+                option.description = 'LOCKED - ' .. boat.reason
+                option.iconColor = 'gray'
+                option.disabled = true
+            end
+
+            table.insert(options, option)
+        end
+
+        lib.registerContext({
+            id = 'ocean_boat_shop',
+            title = 'Boat Dealership (Level ' .. playerLevel .. ')',
+            options = options
+        })
+
+        lib.showContext('ocean_boat_shop')
+    end)
+end
+
+-- =============================================================================
+-- REFUELING SYSTEM
+-- =============================================================================
+
+local fuelBlips = {}
+
+local function createFuelBlips()
+    if not Config.Refueling.enabled or not Config.Refueling.showBlips then return end
+
+    for _, station in ipairs(Config.Refueling.stations) do
+        local blip = AddBlipForCoord(station.coords.x, station.coords.y, station.coords.z)
+        SetBlipSprite(blip, Config.Refueling.blipSprite)
+        SetBlipColour(blip, Config.Refueling.blipColor)
+        SetBlipScale(blip, Config.Refueling.blipScale)
+        SetBlipAsShortRange(blip, true)
+        BeginTextCommandSetBlipName("STRING")
+        AddTextComponentString(station.name)
+        EndTextCommandSetBlipName(blip)
+        table.insert(fuelBlips, blip)
+    end
+end
+
+local function removeFuelBlips()
+    for _, blip in ipairs(fuelBlips) do
+        RemoveBlip(blip)
+    end
+    fuelBlips = {}
+end
+
+local function showRefuelMenu()
+    if not Config.Refueling.enabled then
+        lib.notify({ title = "Unavailable", description = "Refueling is not available", type = "error" })
+        return
+    end
+
+    local playerPed = PlayerPedId()
+    local playerCoords = GetEntityCoords(playerPed)
+
+    -- Check if near a fuel station
+    local nearStation = nil
+    for _, station in ipairs(Config.Refueling.stations) do
+        if #(playerCoords - station.coords) < Config.Refueling.maxDistance then
+            nearStation = station
+            break
+        end
+    end
+
+    if not nearStation then
+        lib.notify({ title = "Too Far", description = "You're not near a fuel station", type = "error" })
+        return
+    end
+
+    -- Check if in a boat
+    if not IsPedInAnyVehicle(playerPed, false) then
+        lib.notify({ title = "No Boat", description = "You must be in a boat to refuel", type = "error" })
+        return
+    end
+
+    local vehicle = GetVehiclePedIsIn(playerPed, false)
+    if not IsThisModelABoat(GetEntityModel(vehicle)) then
+        lib.notify({ title = "Not a Boat", description = "This vehicle cannot be refueled here", type = "error" })
+        return
+    end
+
+    -- Calculate fuel needed
+    local fuelNeeded = math.floor((1.0 - currentFuel) * 100)
+    local costPerLiter = Config.Refueling.costPerLiter
+
+    local options = {
+        { value = 10, label = '10 Liters - $' .. (10 * costPerLiter) },
+        { value = 25, label = '25 Liters - $' .. (25 * costPerLiter) },
+        { value = 50, label = '50 Liters - $' .. (50 * costPerLiter) },
+        { value = fuelNeeded, label = 'Fill Up (' .. fuelNeeded .. 'L) - $' .. (fuelNeeded * costPerLiter) },
+    }
+
+    local input = lib.inputDialog('Refuel at ' .. nearStation.name, {
+        { type = 'select', label = 'Amount', options = options, required = true }
+    })
+
+    if input then
+        local amount = input[1]
+        QBCore.Functions.TriggerCallback('cargo:refuelBoat', function(success, cost, liters)
+            if success then
+                currentFuel = math.min(1.0, currentFuel + (liters / 100))
+                lib.notify({ title = "Refueled", description = "Added " .. liters .. "L for $" .. cost, type = "success" })
+            else
+                lib.notify({ title = "Error", description = cost, type = "error" })
+            end
+        end, nil, amount)
+    end
+end
+
+-- =============================================================================
+-- RANDOM ENCOUNTERS
+-- =============================================================================
+
+local activeEncounter = nil
+local encounterEntities = {}
+
+local function cleanupEncounter()
+    for _, entity in ipairs(encounterEntities) do
+        if DoesEntityExist(entity) then
+            DeleteEntity(entity)
+        end
+    end
+    encounterEntities = {}
+    activeEncounter = nil
+end
+
+local function spawnPirateEncounter(encounter)
+    local playerPed = PlayerPedId()
+    local playerCoords = GetEntityCoords(playerPed)
+
+    -- Spawn pirate boat behind player
+    local heading = GetEntityHeading(currentBoat)
+    local spawnCoords = playerCoords - (GetEntityForwardVector(currentBoat) * 100)
+
+    local boatModel = GetHashKey(encounter.vehicleModel)
+    RequestModel(boatModel)
+    while not HasModelLoaded(boatModel) do Wait(1) end
+
+    local pirateBoat = CreateVehicle(boatModel, spawnCoords.x, spawnCoords.y, spawnCoords.z, heading, true, false)
+    SetEntityAsMissionEntity(pirateBoat, true, true)
+    table.insert(encounterEntities, pirateBoat)
+
+    -- Spawn pirates
+    local pedModel = GetHashKey(encounter.pedModel)
+    RequestModel(pedModel)
+    while not HasModelLoaded(pedModel) do Wait(1) end
+
+    for i = 1, encounter.attackerCount do
+        local pirate = CreatePedInsideVehicle(pirateBoat, 4, pedModel, i == 1 and -1 or 0, true, false)
+        SetEntityAsMissionEntity(pirate, true, true)
+
+        -- Give weapons
+        for _, weapon in ipairs(encounter.weapons) do
+            GiveWeaponToPed(pirate, GetHashKey(weapon), 999, false, true)
+        end
+
+        -- Make hostile
+        SetPedRelationshipGroupHash(pirate, GetHashKey("HATES_PLAYER"))
+        TaskCombatPed(pirate, playerPed, 0, 16)
+
+        table.insert(encounterEntities, pirate)
+    end
+
+    -- Make boat chase player
+    TaskVehicleChase(GetPedInVehicleSeat(pirateBoat, -1), playerPed)
+
+    lib.notify({
+        title = "PIRATES!",
+        description = "Hostile boats approaching! Defend yourself!",
+        type = "error",
+        duration = 7000
+    })
+
+    activeEncounter = {
+        type = "pirates",
+        data = encounter,
+        startTime = GetGameTimer()
+    }
+end
+
+local function spawnCoastGuardEncounter(encounter)
+    local playerPed = PlayerPedId()
+    local playerCoords = GetEntityCoords(playerPed)
+
+    -- Spawn coast guard boat
+    local heading = GetEntityHeading(currentBoat)
+    local spawnCoords = playerCoords + (GetEntityForwardVector(currentBoat) * 150)
+
+    local boatModel = GetHashKey(encounter.vehicleModel)
+    RequestModel(boatModel)
+    while not HasModelLoaded(boatModel) do Wait(1) end
+
+    local cgBoat = CreateVehicle(boatModel, spawnCoords.x, spawnCoords.y, spawnCoords.z, heading + 180, true, false)
+    SetEntityAsMissionEntity(cgBoat, true, true)
+    table.insert(encounterEntities, cgBoat)
+
+    -- Spawn coast guard officers
+    local pedModel = GetHashKey(encounter.pedModel)
+    RequestModel(pedModel)
+    while not HasModelLoaded(pedModel) do Wait(1) end
+
+    for i = 1, encounter.attackerCount do
+        local officer = CreatePedInsideVehicle(cgBoat, 4, pedModel, i == 1 and -1 or 0, true, false)
+        SetEntityAsMissionEntity(officer, true, true)
+        table.insert(encounterEntities, officer)
+    end
+
+    lib.notify({
+        title = "COAST GUARD",
+        description = "Coast Guard patrol approaching! Stop or flee!",
+        type = "warning",
+        duration = 7000
+    })
+
+    activeEncounter = {
+        type = "coastguard",
+        data = encounter,
+        startTime = GetGameTimer(),
+        canEscape = true
+    }
+
+    -- Alert police for illegal cargo
+    if selectedCargo and selectedCargo.illegal then
+        TriggerServerEvent('cargo:policeAlert', playerCoords, selectedCargo.id)
+    end
+end
+
+local function spawnDistressEncounter(encounter)
+    local playerPed = PlayerPedId()
+    local playerCoords = GetEntityCoords(playerPed)
+
+    -- Spawn distressed person in water
+    local spawnCoords = playerCoords + vector3(math.random(-100, 100), math.random(-100, 100), 0)
+
+    local pedModel = GetHashKey(encounter.pedModel)
+    RequestModel(pedModel)
+    while not HasModelLoaded(pedModel) do Wait(1) end
+
+    local victim = CreatePed(4, pedModel, spawnCoords.x, spawnCoords.y, spawnCoords.z - 0.5, 0.0, true, false)
+    SetEntityAsMissionEntity(victim, true, true)
+    SetPedConfigFlag(victim, 32, false) -- Can't drown
+    table.insert(encounterEntities, victim)
+
+    -- Create blip for victim
+    local blip = AddBlipForEntity(victim)
+    SetBlipSprite(blip, 480) -- Life ring
+    SetBlipColour(blip, 1) -- Red
+    SetBlipScale(blip, 1.0)
+    BeginTextCommandSetBlipName("STRING")
+    AddTextComponentString("Person in Distress")
+    EndTextCommandSetBlipName(blip)
+
+    lib.notify({
+        title = "DISTRESS SIGNAL",
+        description = "Someone is stranded in the water! Rescue them for a bonus!",
+        type = "info",
+        duration = 7000
+    })
+
+    activeEncounter = {
+        type = "distress",
+        data = encounter,
+        startTime = GetGameTimer(),
+        victim = victim,
+        blip = blip
+    }
+end
+
+local function checkEncounterCompletion()
+    if not activeEncounter then return end
+
+    local playerPed = PlayerPedId()
+    local playerCoords = GetEntityCoords(playerPed)
+
+    if activeEncounter.type == "pirates" then
+        -- Check if all pirates are dead
+        local allDead = true
+        for _, entity in ipairs(encounterEntities) do
+            if IsEntityAPed(entity) and not IsEntityDead(entity) then
+                allDead = false
+                break
+            end
+        end
+
+        if allDead then
+            lib.notify({ title = "Pirates Defeated!", description = "+" .. activeEncounter.data.xpBonus .. " XP", type = "success" })
+            TriggerServerEvent('cargo:logEncounter', 'pirates', 'success', 0, activeEncounter.data.xpBonus, selectedCargo and selectedCargo.id)
+            cleanupEncounter()
+        end
+
+    elseif activeEncounter.type == "coastguard" then
+        -- Check if escaped
+        local cgBoat = encounterEntities[1]
+        if cgBoat and DoesEntityExist(cgBoat) then
+            local cgCoords = GetEntityCoords(cgBoat)
+            if #(playerCoords - cgCoords) > activeEncounter.data.escapeDistance then
+                lib.notify({ title = "Escaped!", description = "You outran the Coast Guard!", type = "success" })
+                TriggerServerEvent('cargo:logEncounter', 'coastguard', 'escaped', 0, 0, selectedCargo and selectedCargo.id)
+                cleanupEncounter()
+            end
+        end
+
+    elseif activeEncounter.type == "distress" then
+        -- Check if victim is near player boat
+        if activeEncounter.victim and DoesEntityExist(activeEncounter.victim) then
+            local victimCoords = GetEntityCoords(activeEncounter.victim)
+            if currentBoat and #(victimCoords - GetEntityCoords(currentBoat)) < 5.0 then
+                lib.notify({
+                    title = "Rescue Complete!",
+                    description = "+$" .. formatNumber(activeEncounter.data.reward) .. " and +" .. activeEncounter.data.xpBonus .. " XP",
+                    type = "success"
+                })
+                TriggerServerEvent('cargo:logEncounter', 'distress', 'success', activeEncounter.data.reward, activeEncounter.data.xpBonus, selectedCargo and selectedCargo.id)
+                if activeEncounter.blip then RemoveBlip(activeEncounter.blip) end
+                cleanupEncounter()
+            end
+        end
+    end
+
+    -- Timeout check
+    if activeEncounter and GetGameTimer() - activeEncounter.startTime > 120000 then -- 2 minute timeout
+        TriggerServerEvent('cargo:logEncounter', activeEncounter.type, 'failed', 0, 0, selectedCargo and selectedCargo.id)
+        cleanupEncounter()
+    end
+end
+
+local function rollForEncounter()
+    if not Config.RandomEncounters.enabled or activeEncounter then return end
+    if not isOnJob or not currentBoat then return end
+
+    local playerCoords = GetEntityCoords(PlayerPedId())
+
+    -- Check distance from all ports
+    for _, port in ipairs(Config.Ports) do
+        if #(playerCoords - port.coords) < Config.RandomEncounters.minDistanceFromPort then
+            return -- Too close to port
+        end
+    end
+
+    local tier = selectedBoat and selectedBoat.tier or 1
+
+    for _, encounter in ipairs(Config.RandomEncounters.encounters) do
+        if tier >= encounter.minTier then
+            local chance = encounter.chance
+
+            -- Bonus chance for illegal cargo
+            if selectedCargo and selectedCargo.illegal and encounter.illegalCargoBonus then
+                chance = chance + encounter.illegalCargoBonus
+            end
+
+            if math.random() < chance then
+                debugPrint("Spawning encounter: " .. encounter.id)
+
+                if encounter.id == "pirates" then
+                    spawnPirateEncounter(encounter)
+                elseif encounter.id == "coastguard" then
+                    spawnCoastGuardEncounter(encounter)
+                elseif encounter.id == "distress" then
+                    spawnDistressEncounter(encounter)
+                end
+
+                return -- Only one encounter at a time
+            end
+        end
+    end
+end
+
+-- Encounter check thread
+CreateThread(function()
+    while true do
+        Wait(Config.RandomEncounters.checkInterval or 30000)
+
+        if isOnJob and currentBoat then
+            rollForEncounter()
+        end
+
+        if activeEncounter then
+            checkEncounterCompletion()
+        end
+    end
+end)
+
+-- =============================================================================
 -- COMMANDS
 -- =============================================================================
 
 RegisterCommand('startdelivery', function()
     showRouteSelection()
+end, false)
+
+RegisterCommand('fleet', function()
+    showFleetManagement()
+end, false)
+
+RegisterCommand('buyboat', function()
+    showBoatShop()
+end, false)
+
+RegisterCommand('refuel', function()
+    showRefuelMenu()
 end, false)
 
 RegisterCommand('enddelivery', function()
@@ -1027,10 +1623,12 @@ end)
 CreateThread(function()
     Wait(1000)
     debugPrint("Ocean Delivery client initialized")
+    createFuelBlips()
 end)
 
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     TriggerServerEvent('cargo:playerLoaded')
+    createFuelBlips()
 end)
 
 RegisterNetEvent('qbx-core:client:PlayerLoaded', function()

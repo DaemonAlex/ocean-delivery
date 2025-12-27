@@ -121,6 +121,68 @@ CreateThread(function()
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ]], {})
+
+    -- Fleet ownership table
+    MySQL.Async.execute([[
+        CREATE TABLE IF NOT EXISTS ocean_delivery_fleet (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            citizenid VARCHAR(50) NOT NULL,
+            boat_model VARCHAR(50) NOT NULL,
+            boat_name VARCHAR(100) DEFAULT NULL,
+            condition_percent FLOAT DEFAULT 100.0,
+            fuel_level FLOAT DEFAULT 100.0,
+            total_deliveries INT DEFAULT 0,
+            total_distance FLOAT DEFAULT 0,
+            purchase_price INT DEFAULT 0,
+            insured BOOLEAN DEFAULT FALSE,
+            last_maintenance TIMESTAMP NULL,
+            purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_citizenid (citizenid),
+            INDEX idx_model (boat_model)
+        )
+    ]], {}, function(success)
+        if success then
+            debugPrint("Fleet ownership table initialized")
+        end
+    end)
+
+    -- Maintenance log table
+    MySQL.Async.execute([[
+        CREATE TABLE IF NOT EXISTS ocean_delivery_maintenance (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            fleet_id INT NOT NULL,
+            citizenid VARCHAR(50) NOT NULL,
+            maintenance_type ENUM('repair', 'insurance', 'routine') DEFAULT 'routine',
+            cost INT DEFAULT 0,
+            notes VARCHAR(255) DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_fleet (fleet_id),
+            INDEX idx_citizenid (citizenid)
+        )
+    ]], {}, function(success)
+        if success then
+            debugPrint("Maintenance log table initialized")
+        end
+    end)
+
+    -- Encounters log table
+    MySQL.Async.execute([[
+        CREATE TABLE IF NOT EXISTS ocean_delivery_encounters (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            citizenid VARCHAR(50) NOT NULL,
+            encounter_type VARCHAR(50) NOT NULL,
+            outcome ENUM('success', 'failed', 'escaped', 'caught') DEFAULT 'success',
+            reward INT DEFAULT 0,
+            xp_earned INT DEFAULT 0,
+            cargo_type VARCHAR(50) DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_citizenid (citizenid)
+        )
+    ]], {}, function(success)
+        if success then
+            debugPrint("Encounters log table initialized")
+        end
+    end)
 end)
 
 -- =============================================================================
@@ -867,6 +929,390 @@ QBCore.Functions.CreateCallback('cargo:getTotalEarnings', function(source, cb)
         cb(playerStats[citizenid].total_earnings or 0)
     else
         cb(0)
+    end
+end)
+
+-- =============================================================================
+-- FLEET OWNERSHIP CALLBACKS
+-- =============================================================================
+
+-- Get player's fleet
+QBCore.Functions.CreateCallback('cargo:getPlayerFleet', function(source, cb)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if Player then
+        local citizenid = Player.PlayerData.citizenid
+
+        local fleet = MySQL.Sync.fetchAll([[
+            SELECT * FROM ocean_delivery_fleet WHERE citizenid = ? ORDER BY purchased_at DESC
+        ]], {citizenid})
+
+        -- Enhance with config data
+        for i, ship in ipairs(fleet) do
+            local boatData = Config.GetBoatByModel(ship.boat_model)
+            if boatData then
+                fleet[i].label = boatData.label
+                fleet[i].tier = boatData.tier
+                fleet[i].speed = boatData.speed
+                fleet[i].capacity = boatData.capacity
+                fleet[i].description = boatData.description
+                fleet[i].maintenance = boatData.maintenance
+                fleet[i].insurance_cost = boatData.insurance
+            end
+        end
+
+        cb(fleet)
+    else
+        cb({})
+    end
+end)
+
+-- Buy a boat
+QBCore.Functions.CreateCallback('cargo:buyBoat', function(source, cb, boatModel, boatName)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then
+        cb(false, "Player not found")
+        return
+    end
+
+    local citizenid = Player.PlayerData.citizenid
+    local boatData = Config.GetBoatByModel(boatModel)
+
+    if not boatData then
+        cb(false, "Invalid boat model")
+        return
+    end
+
+    -- Check player level
+    if not playerStats[citizenid] then
+        LoadPlayerStats(citizenid)
+    end
+    local stats = playerStats[citizenid]
+
+    if boatData.requiredLevel and stats.level < boatData.requiredLevel then
+        cb(false, "You need level " .. boatData.requiredLevel .. " to buy this boat")
+        return
+    end
+
+    -- Check fleet limit
+    local fleetCount = MySQL.Sync.fetchScalar([[
+        SELECT COUNT(*) FROM ocean_delivery_fleet WHERE citizenid = ?
+    ]], {citizenid})
+
+    if fleetCount >= Config.FleetOwnership.maxShipsPerPlayer then
+        cb(false, "You've reached the maximum fleet size of " .. Config.FleetOwnership.maxShipsPerPlayer)
+        return
+    end
+
+    -- Check if player has enough money
+    local price = boatData.price or 10000
+    if Player.PlayerData.money.bank < price then
+        cb(false, "You don't have enough money. Need $" .. price)
+        return
+    end
+
+    -- Deduct money and add boat
+    Player.Functions.RemoveMoney('bank', price, "Boat purchase: " .. boatData.label)
+
+    MySQL.Async.execute([[
+        INSERT INTO ocean_delivery_fleet (citizenid, boat_model, boat_name, purchase_price)
+        VALUES (?, ?, ?, ?)
+    ]], {citizenid, boatModel, boatName or boatData.label, price}, function(rowsChanged)
+        if rowsChanged > 0 then
+            debugPrint(citizenid .. " purchased " .. boatData.label .. " for $" .. price)
+            cb(true, "Successfully purchased " .. boatData.label)
+        else
+            -- Refund if insert failed
+            Player.Functions.AddMoney('bank', price, "Refund: Boat purchase failed")
+            cb(false, "Failed to complete purchase")
+        end
+    end)
+end)
+
+-- Sell a boat
+QBCore.Functions.CreateCallback('cargo:sellBoat', function(source, cb, fleetId)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then
+        cb(false, "Player not found")
+        return
+    end
+
+    local citizenid = Player.PlayerData.citizenid
+
+    -- Get boat info
+    local boat = MySQL.Sync.fetchAll([[
+        SELECT * FROM ocean_delivery_fleet WHERE id = ? AND citizenid = ?
+    ]], {fleetId, citizenid})
+
+    if not boat or #boat == 0 then
+        cb(false, "Boat not found or you don't own it")
+        return
+    end
+
+    boat = boat[1]
+    local boatData = Config.GetBoatByModel(boat.boat_model)
+    local basePrice = boatData and boatData.price or boat.purchase_price
+    local conditionMultiplier = boat.condition_percent / 100
+    local sellPrice = math.floor(basePrice * Config.FleetOwnership.sellBackPercent * conditionMultiplier)
+
+    -- Delete boat and give money
+    MySQL.Async.execute([[
+        DELETE FROM ocean_delivery_fleet WHERE id = ?
+    ]], {fleetId}, function(rowsChanged)
+        if rowsChanged > 0 then
+            Player.Functions.AddMoney('bank', sellPrice, "Boat sale: " .. (boatData and boatData.label or boat.boat_model))
+            debugPrint(citizenid .. " sold boat ID " .. fleetId .. " for $" .. sellPrice)
+            cb(true, "Sold for $" .. sellPrice)
+        else
+            cb(false, "Failed to sell boat")
+        end
+    end)
+end)
+
+-- Repair a boat
+QBCore.Functions.CreateCallback('cargo:repairBoat', function(source, cb, fleetId)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then
+        cb(false, "Player not found")
+        return
+    end
+
+    local citizenid = Player.PlayerData.citizenid
+
+    -- Get boat info
+    local boat = MySQL.Sync.fetchAll([[
+        SELECT * FROM ocean_delivery_fleet WHERE id = ? AND citizenid = ?
+    ]], {fleetId, citizenid})
+
+    if not boat or #boat == 0 then
+        cb(false, "Boat not found")
+        return
+    end
+
+    boat = boat[1]
+
+    if boat.condition_percent >= 100 then
+        cb(false, "Boat is already in perfect condition")
+        return
+    end
+
+    local boatData = Config.GetBoatByModel(boat.boat_model)
+    local basePrice = boatData and boatData.price or boat.purchase_price
+    local damagePercent = (100 - boat.condition_percent) / 100
+    local repairCost = math.floor(basePrice * Config.FleetOwnership.repairCostMultiplier * damagePercent)
+
+    if Player.PlayerData.money.bank < repairCost then
+        cb(false, "Repair costs $" .. repairCost .. ". You don't have enough.")
+        return
+    end
+
+    Player.Functions.RemoveMoney('bank', repairCost, "Boat repair")
+
+    MySQL.Async.execute([[
+        UPDATE ocean_delivery_fleet SET condition_percent = 100.0, last_maintenance = NOW() WHERE id = ?
+    ]], {fleetId})
+
+    -- Log maintenance
+    MySQL.Async.execute([[
+        INSERT INTO ocean_delivery_maintenance (fleet_id, citizenid, maintenance_type, cost, notes)
+        VALUES (?, ?, 'repair', ?, 'Full repair')
+    ]], {fleetId, citizenid, repairCost})
+
+    debugPrint(citizenid .. " repaired boat ID " .. fleetId .. " for $" .. repairCost)
+    cb(true, "Boat repaired for $" .. repairCost)
+end)
+
+-- Add insurance to a boat
+QBCore.Functions.CreateCallback('cargo:insureBoat', function(source, cb, fleetId)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then
+        cb(false, "Player not found")
+        return
+    end
+
+    local citizenid = Player.PlayerData.citizenid
+
+    local boat = MySQL.Sync.fetchAll([[
+        SELECT * FROM ocean_delivery_fleet WHERE id = ? AND citizenid = ?
+    ]], {fleetId, citizenid})
+
+    if not boat or #boat == 0 then
+        cb(false, "Boat not found")
+        return
+    end
+
+    boat = boat[1]
+
+    if boat.insured == 1 then
+        cb(false, "Boat is already insured")
+        return
+    end
+
+    local boatData = Config.GetBoatByModel(boat.boat_model)
+    local insuranceCost = boatData and boatData.insurance or math.floor(boat.purchase_price * 0.05)
+
+    if Player.PlayerData.money.bank < insuranceCost then
+        cb(false, "Insurance costs $" .. insuranceCost)
+        return
+    end
+
+    Player.Functions.RemoveMoney('bank', insuranceCost, "Boat insurance")
+
+    MySQL.Async.execute([[
+        UPDATE ocean_delivery_fleet SET insured = TRUE WHERE id = ?
+    ]], {fleetId})
+
+    MySQL.Async.execute([[
+        INSERT INTO ocean_delivery_maintenance (fleet_id, citizenid, maintenance_type, cost, notes)
+        VALUES (?, ?, 'insurance', ?, 'Insurance purchased')
+    ]], {fleetId, citizenid, insuranceCost})
+
+    cb(true, "Boat insured for $" .. insuranceCost)
+end)
+
+-- Get boats available for purchase
+QBCore.Functions.CreateCallback('cargo:getBoatsForSale', function(source, cb)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if Player then
+        local citizenid = Player.PlayerData.citizenid
+
+        if not playerStats[citizenid] then
+            LoadPlayerStats(citizenid)
+        end
+
+        local stats = playerStats[citizenid]
+        local playerLevel = stats.level
+
+        local boatsForSale = {}
+        for _, boat in ipairs(Config.Boats) do
+            local canBuy = true
+            local reason = nil
+
+            if boat.requiredLevel and playerLevel < boat.requiredLevel then
+                canBuy = false
+                reason = "Requires Level " .. boat.requiredLevel
+            end
+
+            table.insert(boatsForSale, {
+                model = boat.model,
+                label = boat.label,
+                tier = boat.tier,
+                speed = boat.speed,
+                capacity = boat.capacity,
+                handling = boat.handling,
+                fuelEfficiency = boat.fuelEfficiency,
+                description = boat.description,
+                price = boat.price,
+                insurance = boat.insurance,
+                maintenance = boat.maintenance,
+                requiredLevel = boat.requiredLevel or 1,
+                canBuy = canBuy,
+                reason = reason
+            })
+        end
+
+        cb(boatsForSale, playerLevel)
+    else
+        cb({}, 1)
+    end
+end)
+
+-- =============================================================================
+-- REFUELING CALLBACKS
+-- =============================================================================
+
+-- Refuel boat
+QBCore.Functions.CreateCallback('cargo:refuelBoat', function(source, cb, fleetId, amount)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then
+        cb(false, "Player not found")
+        return
+    end
+
+    local citizenid = Player.PlayerData.citizenid
+    local costPerLiter = Config.Refueling.costPerLiter or 3
+    local totalCost = math.floor(amount * costPerLiter)
+
+    if Player.PlayerData.money.cash < totalCost then
+        cb(false, "You need $" .. totalCost .. " cash to refuel")
+        return
+    end
+
+    Player.Functions.RemoveMoney('cash', totalCost, "Boat refuel")
+
+    if fleetId then
+        MySQL.Async.execute([[
+            UPDATE ocean_delivery_fleet SET fuel_level = LEAST(100, fuel_level + ?) WHERE id = ? AND citizenid = ?
+        ]], {amount, fleetId, citizenid})
+    end
+
+    cb(true, totalCost, amount)
+end)
+
+-- =============================================================================
+-- ENCOUNTER CALLBACKS
+-- =============================================================================
+
+-- Log encounter result
+RegisterNetEvent('cargo:logEncounter', function(encounterType, outcome, reward, xpEarned, cargoType)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if Player then
+        local citizenid = Player.PlayerData.citizenid
+
+        MySQL.Async.execute([[
+            INSERT INTO ocean_delivery_encounters (citizenid, encounter_type, outcome, reward, xp_earned, cargo_type)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ]], {citizenid, encounterType, outcome, reward or 0, xpEarned or 0, cargoType})
+
+        -- Award bonus XP/money for successful encounters
+        if outcome == 'success' and reward > 0 then
+            Player.Functions.AddMoney('cash', reward, "Encounter reward: " .. encounterType)
+        end
+
+        if outcome == 'success' and xpEarned > 0 then
+            AwardXP(citizenid, xpEarned, "Encounter: " .. encounterType)
+        end
+
+        debugPrint(citizenid .. " completed encounter: " .. encounterType .. " - " .. outcome)
+    end
+end)
+
+-- Police alert for illegal cargo
+RegisterNetEvent('cargo:policeAlert', function(coords, cargoType)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+
+    if not Config.PoliceIntegration.enabled or not Config.PoliceIntegration.alertPolice then
+        return
+    end
+
+    -- Get online police count
+    local players = QBCore.Functions.GetPlayers()
+    local policeCount = 0
+
+    for _, playerId in ipairs(players) do
+        local targetPlayer = QBCore.Functions.GetPlayer(playerId)
+        if targetPlayer and targetPlayer.PlayerData.job.name == 'police' then
+            policeCount = policeCount + 1
+        end
+    end
+
+    if policeCount >= Config.PoliceIntegration.minCops then
+        -- Alert all police
+        for _, playerId in ipairs(players) do
+            local targetPlayer = QBCore.Functions.GetPlayer(playerId)
+            if targetPlayer and targetPlayer.PlayerData.job.name == 'police' then
+                TriggerClientEvent('cargo:policeNotification', playerId, coords, cargoType)
+            end
+        end
     end
 end)
 

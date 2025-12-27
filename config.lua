@@ -74,11 +74,14 @@ Config.Boats = {
         label = "Dinghy",
         model = "dinghy",
         tier = 1,
-        speed = 60,           -- Max speed in knots (for display)
-        capacity = 1,         -- Number of cargo units
-        handling = 1.0,       -- Handling multiplier (1.0 = normal)
-        fuelEfficiency = 1.2, -- 20% more efficient
+        speed = 60,
+        capacity = 1,
+        handling = 1.0,
+        fuelEfficiency = 1.2,
         description = "Basic inflatable boat. Light and agile.",
+        price = 5000,
+        insurance = 250,
+        maintenance = 50,
     },
     {
         label = "Suntrap",
@@ -89,6 +92,9 @@ Config.Boats = {
         handling = 1.1,
         fuelEfficiency = 1.0,
         description = "Small recreational boat. Good visibility.",
+        price = 8000,
+        insurance = 400,
+        maintenance = 75,
     },
     {
         label = "Speeder",
@@ -99,6 +105,9 @@ Config.Boats = {
         handling = 0.9,
         fuelEfficiency = 0.8,
         description = "Fast speedboat. Burns fuel quickly.",
+        price = 15000,
+        insurance = 750,
+        maintenance = 150,
     },
     {
         label = "Seashark",
@@ -109,6 +118,9 @@ Config.Boats = {
         handling = 0.85,
         fuelEfficiency = 0.7,
         description = "Personal watercraft. Very fast but unstable.",
+        price = 12000,
+        insurance = 600,
+        maintenance = 100,
     },
 
     -- Tier 2: Regional (levels 4-6)
@@ -122,6 +134,9 @@ Config.Boats = {
         fuelEfficiency = 0.9,
         requiredLevel = 4,
         description = "High-performance yacht. Fast and reliable.",
+        price = 75000,
+        insurance = 3750,
+        maintenance = 500,
     },
     {
         label = "Tropic",
@@ -133,6 +148,9 @@ Config.Boats = {
         fuelEfficiency = 1.1,
         requiredLevel = 4,
         description = "Pontoon boat with cargo space.",
+        price = 45000,
+        insurance = 2250,
+        maintenance = 350,
     },
     {
         label = "Squalo",
@@ -144,6 +162,9 @@ Config.Boats = {
         fuelEfficiency = 0.85,
         requiredLevel = 5,
         description = "Sport yacht. Balance of speed and capacity.",
+        price = 95000,
+        insurance = 4750,
+        maintenance = 650,
     },
     {
         label = "Toro",
@@ -155,6 +176,9 @@ Config.Boats = {
         fuelEfficiency = 0.9,
         requiredLevel = 6,
         description = "Classic speedboat with large deck.",
+        price = 125000,
+        insurance = 6250,
+        maintenance = 800,
     },
 
     -- Tier 3: Long Haul (levels 7+)
@@ -168,6 +192,9 @@ Config.Boats = {
         fuelEfficiency = 1.0,
         requiredLevel = 7,
         description = "Luxury yacht. Slow but massive cargo space.",
+        price = 500000,
+        insurance = 25000,
+        maintenance = 3500,
     },
     {
         label = "Tug",
@@ -179,6 +206,9 @@ Config.Boats = {
         fuelEfficiency = 0.6,
         requiredLevel = 8,
         description = "Industrial tugboat. Maximum cargo capacity.",
+        price = 750000,
+        insurance = 37500,
+        maintenance = 5000,
     },
 }
 
@@ -451,14 +481,161 @@ Config.PoliceIntegration = {
 }
 
 -- =============================================================================
--- FLEET OWNERSHIP (Future Feature)
+-- FLEET OWNERSHIP
 -- =============================================================================
 
 Config.FleetOwnership = {
-    enabled = false,               -- Enable when ready
+    enabled = true,
     maxShipsPerPlayer = 5,
-    maintenanceCostPerDay = 500,  -- Per ship
-    insuranceCostPercentage = 0.1, -- 10% of ship value
+    starterBoat = "dinghy",        -- Free starter boat for new players
+    sellBackPercent = 0.6,         -- Get 60% back when selling
+    insurancePayoutPercent = 0.8,  -- 80% of value on insurance claim
+    maintenanceInterval = 24,      -- Hours between maintenance charges
+    repairCostMultiplier = 0.1,    -- 10% of boat price for full repair
+}
+
+-- =============================================================================
+-- RANDOM ENCOUNTERS
+-- =============================================================================
+
+Config.RandomEncounters = {
+    enabled = true,
+    checkInterval = 30000,         -- Check every 30 seconds
+    minDistanceFromPort = 500,     -- Don't spawn encounters near ports
+
+    -- Encounter types
+    encounters = {
+        {
+            id = "pirates",
+            label = "Pirates",
+            description = "Hostile boats trying to steal your cargo",
+            chance = 0.05,          -- 5% chance per check
+            minTier = 2,            -- Only for tier 2+ routes
+            illegalCargoBonus = 0.1, -- +10% chance with illegal cargo
+            reward = 0,             -- No bonus reward (you're defending)
+            xpBonus = 50,           -- Bonus XP for surviving
+            vehicleModel = "dinghy",
+            pedModel = "g_m_y_ballasout_01",
+            attackerCount = 2,
+            weapons = {"WEAPON_PISTOL", "WEAPON_MICROSMG"},
+        },
+        {
+            id = "coastguard",
+            label = "Coast Guard",
+            description = "Patrol checking for illegal cargo",
+            chance = 0.03,          -- 3% base chance
+            minTier = 1,
+            illegalCargoBonus = 0.15, -- +15% chance with illegal cargo
+            reward = 0,
+            xpBonus = 0,
+            vehicleModel = "predator",
+            pedModel = "s_m_y_uscg_01",
+            attackerCount = 2,
+            searchTime = 15000,     -- 15 seconds to search
+            escapeDistance = 500,   -- Distance to escape
+        },
+        {
+            id = "distress",
+            label = "Distress Signal",
+            description = "Someone needs rescue",
+            chance = 0.04,          -- 4% chance
+            minTier = 1,
+            illegalCargoBonus = 0,
+            reward = 2500,          -- Bonus for helping
+            xpBonus = 100,
+            rescueTime = 30000,     -- 30 seconds to rescue
+            pedModel = "a_m_y_beach_01",
+        },
+        {
+            id = "smuggler",
+            label = "Fellow Smuggler",
+            description = "Another smuggler offers a deal",
+            chance = 0.02,          -- 2% chance
+            minTier = 2,
+            illegalCargoBonus = 0.1,
+            reward = 5000,          -- Potential bonus
+            xpBonus = 75,
+            vehicleModel = "speeder",
+            dealTypes = {"escort", "swap", "info"},
+        },
+    },
+}
+
+-- =============================================================================
+-- REFUELING SYSTEM
+-- =============================================================================
+
+Config.Refueling = {
+    enabled = true,
+    costPerLiter = 3,              -- $ per liter
+    refuelSpeed = 5,               -- Liters per second
+    maxDistance = 15.0,            -- Max distance from fuel pump
+
+    -- Fuel station markers (blips)
+    showBlips = true,
+    blipSprite = 361,              -- Fuel pump
+    blipColor = 2,                 -- Green
+    blipScale = 0.8,
+
+    -- Fuel station locations (coords on water near docks)
+    stations = {
+        {
+            name = "Los Santos Marina Fuel",
+            coords = vector3(-795.0, -1510.0, 0.5),
+            heading = 45.0,
+        },
+        {
+            name = "Elysian Island Fuel Dock",
+            coords = vector3(-175.0, -2395.0, 0.5),
+            heading = 180.0,
+        },
+        {
+            name = "Paleto Bay Fuel Station",
+            coords = vector3(-285.0, 6645.0, 0.5),
+            heading = 0.0,
+        },
+        {
+            name = "Vespucci Canals Fuel",
+            coords = vector3(-1095.0, -1620.0, 0.5),
+            heading = 90.0,
+        },
+    },
+}
+
+-- =============================================================================
+-- PHONE APP INTEGRATION
+-- =============================================================================
+
+Config.PhoneApp = {
+    enabled = true,
+    appName = "Ocean Delivery",
+    appIcon = "anchor",            -- Font Awesome icon
+
+    -- Supported phone resources
+    supportedPhones = {
+        "lb-phone",
+        "qs-smartphone",
+        "npwd",
+    },
+
+    -- App features
+    features = {
+        startJob = true,           -- Start delivery from phone
+        viewStats = true,          -- View player stats
+        manageFleet = true,        -- Manage owned boats
+        viewHistory = true,        -- View delivery history
+        checkWeather = true,       -- Check current weather bonus
+        findFuel = true,           -- Show nearest fuel station
+    },
+
+    -- Notification settings
+    notifications = {
+        jobComplete = true,
+        levelUp = true,
+        encounterWarning = true,
+        lowFuel = true,
+        maintenanceDue = true,
+    },
 }
 
 -- =============================================================================
@@ -550,4 +727,40 @@ function Config.GetXPProgress(currentXP)
     local xpNeeded = nextLevelXP - previousXP
 
     return math.floor((xpInLevel / xpNeeded) * 100)
+end
+
+-- Get boat data by model name
+function Config.GetBoatByModel(model)
+    for _, boat in ipairs(Config.Boats) do
+        if boat.model == model then
+            return boat
+        end
+    end
+    return nil
+end
+
+-- Get encounter by ID
+function Config.GetEncounterById(id)
+    for _, encounter in ipairs(Config.RandomEncounters.encounters) do
+        if encounter.id == id then
+            return encounter
+        end
+    end
+    return nil
+end
+
+-- Get nearest fuel station
+function Config.GetNearestFuelStation(coords)
+    local nearest = nil
+    local nearestDist = math.huge
+
+    for _, station in ipairs(Config.Refueling.stations) do
+        local dist = #(coords - station.coords)
+        if dist < nearestDist then
+            nearest = station
+            nearestDist = dist
+        end
+    end
+
+    return nearest, nearestDist
 end
