@@ -1,139 +1,213 @@
-# Ocean Delivery
+# Ocean Delivery v2.0.0
 
-This resource allows players to start a delivery job using a boat in GTA V. Players select a route, are spawned into a boat at a specified location, and must deliver cargo using forklifts. The script supports both QS-Banking and Renewed Banking for payments.
+An advanced boat cargo delivery job system for FiveM with a comprehensive progression system, multiple cargo types, weather effects, and fuel management.
 
 ## Features
 
-- Route selection for delivery jobs via ox_lib interface
-- Realistic boat spawning at specified water locations
-- Delivery count tracking with database persistence
-- Forklift mechanics to move cargo pallets
-- Enhanced pallet interaction using ox_target (if available)
-- Higher payouts for consecutive deliveries
-- Bonus for completing a series of 4 deliveries
-- Job persistence across server restarts and player reconnections
-- Compatible with both QS-Banking and Renewed Banking
-- Interactive pallets with ox_target integration
-- Admin commands for job management
-- Player statistics and tracking
-- 15-minute job timers with fail conditions
-- Anti-cheat measures to prevent exploitation
-- Comprehensive debug system
+### Progression System
+- **10 Levels** with unique titles (Deckhand → Legendary Captain)
+- **3 Ship Tiers**: Coastal, Regional, Long Haul
+- **XP-based progression** with delivery bonuses
+- **Streak bonuses** for consecutive successful deliveries
+- **Series bonuses** for completing 4 deliveries in a row
 
-## Requirements
+### Ship Tiers
 
-- **QBCore Framework**
-- **ox_lib** - For UI interfaces
-- **ox_target** (optional but recommended) - For enhanced interactions
-- **oxmysql** - For database functionality
-- One of the following banking systems:
-  - **Renewed Banking** (preferred)
-  - **QS-Banking** (alternative)
-  - Or defaults to basic QBCore money functions
+| Tier | Name | Description | Unlocked At |
+|------|------|-------------|-------------|
+| 1 | Coastal | Small boats for local harbor runs | Level 1 |
+| 2 | Regional | Medium vessels for coastal voyages | Level 4 |
+| 3 | Long Haul | Large ships for ocean crossings | Level 7 |
+
+### Available Ships
+
+**Tier 1 - Coastal:**
+- Dinghy - Basic inflatable, light and agile
+- Suntrap - Recreational boat, good visibility
+- Speeder - Fast speedboat, burns fuel quickly
+- Seashark - Personal watercraft, very fast but unstable
+
+**Tier 2 - Regional (Level 4+):**
+- Jetmax - High-performance yacht
+- Tropic - Pontoon with cargo space
+- Squalo - Sport yacht, balanced
+- Toro - Classic speedboat with large deck
+
+**Tier 3 - Long Haul (Level 7+):**
+- Marquis - Luxury yacht, massive cargo space
+- Tug - Industrial tugboat, maximum capacity
+
+### Cargo Types
+
+| Cargo | Pay Mult | XP Mult | Special |
+|-------|----------|---------|---------|
+| Standard | 1.0x | 1.0x | None |
+| Electronics | 1.5x | 1.3x | Fragile |
+| Fresh Seafood | 1.4x | 1.2x | Perishable |
+| Medical Supplies | 2.0x | 1.8x | Fragile + Perishable |
+| Unmarked Crates | 3.0x | 2.0x | Illegal (Police risk) |
+| Military Hardware | 4.0x | 2.5x | Illegal + Heavy |
+| Luxury Goods | 2.5x | 1.5x | Fragile (2x damage penalty) |
+| Hazardous Materials | 3.5x | 2.0x | Fragile + Explosion risk |
+
+### Weather System
+- **Clear Skies** - Normal conditions
+- **Overcast** - Slightly reduced visibility
+- **Rain** - +10% pay bonus, reduced handling
+- **Thunderstorm** - +25% pay bonus, severe conditions
+- **Dense Fog** - +15% pay bonus, very low visibility
+
+### Fuel System
+- Ships spawn with 80% fuel
+- Different ships have different fuel efficiency
+- Fuel consumption based on speed and tier
+- Low fuel warnings at 20% and 10%
+- Out of fuel = job failed
+
+### Damage System
+- Cargo takes damage from boat collisions
+- Fragile cargo takes 50% more damage
+- Heavy cargo takes 20% more damage from momentum
+- Damage reduces final payout:
+  - 10% damage → 5% penalty
+  - 30% damage → 15% penalty
+  - 50% damage → 30% penalty
+  - 70%+ damage → 50% penalty
 
 ## Installation
 
-1. Clone or download the repository.
-2. Place the `ocean_delivery` folder in your server's resources directory.
-3. Add `ensure ocean_delivery` to your server configuration file.
-4. Import the `database.sql` file into your database.
-5. Configure port locations and payment settings in `config.lua` if needed.
+1. Place the `ocean-delivery` folder in your server's resources directory
+2. Add to your server.cfg:
+   ```
+   ensure ox_lib
+   ensure oxmysql
+   ensure qb-core
+   ensure ocean-delivery
+   ```
+3. The database tables are created automatically on first start
+
+## Database Tables
+
+The script automatically creates these tables:
+- `ocean_delivery_players` - Player progression and stats
+- `ocean_delivery_history` - Delivery history logs
+- `cargo_locations` - Custom delivery locations
+- `cargo_deliveries` - Legacy delivery tracking
+
+## Commands
+
+### Player Commands
+
+| Command | Description |
+|---------|-------------|
+| `/startdelivery` | Start a new delivery job (opens selection UI) |
+| `/enddelivery` | Cancel current delivery job |
+| `/deliverystats` | View your progression stats in a menu |
+
+### Admin Commands
+
+| Command | Description |
+|---------|-------------|
+| `/adddeliverylocation [name] [tier] [hasFuel]` | Add location at current position |
+| `/listdeliverylocations` | View all delivery locations |
+| `/removedeliverylocation [id]` | Remove a custom location |
+| `/resetdelivery [playerID]` | Reset a player's current job |
+| `/setdeliverylevel [playerID] [level]` | Set a player's delivery level (1-10) |
 
 ## Configuration
 
-The `config.lua` file allows you to customize various aspects of the delivery job:
+All configuration is in `config.lua`:
 
 ```lua
--- Payment settings
-Config.BasePayoutPerDistance = 10 -- Base payout per distance unit
-Config.BonusPayout = 500 -- Bonus payout for every additional delivery in a row
-Config.SeriesBonus = 2000 -- Bonus payout for completing a series of 4 deliveries
-Config.JobStartCost = 0 -- Cost to start a delivery job, set to 0 for free jobs
+-- XP Settings
+Config.XPPerDelivery = 100           -- Base XP per delivery
+Config.XPPerDistance = 0.5           -- Additional XP per distance unit
+Config.XPBonusMultiplier = 1.5       -- Multiplier for bonus deliveries
 
--- Define the ports and locations
-Config.Ports = {
-    {name = "Los Santos Marina", coords = vector3(-802.0, -1496.0, 0.0)},
-    {name = "Paleto Bay Pier", coords = vector3(-275.0, 6635.0, 0.0)},
-    {name = "Vespucci Beach", coords = vector3(-1599.0, -1097.0, 0.0)},
-    {name = "NOOSE Facility", coords = vector3(3857.0, 4458.0, 0.0)}
-}
+-- Payment Settings
+Config.BasePayoutPerDistance = 10    -- Base payout per distance unit
+Config.BonusPayout = 500             -- Bonus per consecutive delivery
+Config.SeriesBonus = 2000            -- Bonus for completing 4 deliveries
 
--- Debug settings
-Config.Debug = false -- Set to true to enable debug prints
+-- Time Settings
+Config.PickupTimer = 15 * 60 * 1000  -- 15 minutes to pick up
+Config.DeliveryTimer = 15 * 60 * 1000 -- 15 minutes to deliver
 
+-- Enable/Disable Systems
+Config.WeatherEffects.enabled = true
+Config.FuelSystem.enabled = true
+Config.DamagePenalty.enabled = true
 ```
-## Usage
 
-### Starting a Delivery Job
+## Dependencies
 
-Players can start a delivery job in one of two ways:
-- Use the `/startdelivery` command
-- Trigger the `cargo:startDelivery` event
+**Required:**
+- qb-core or qbx-core
+- ox_lib
+- oxmysql
 
-This will prompt the player to select a route and spawn them into a boat at the designated location with a pallet to pick up.
+**Optional:**
+- ox_target (enhanced interaction)
+- qs-banking or renewed-banking (banking integration)
 
-### Delivery Process
+## Gameplay Flow
 
-1. **Pick Up Phase**:
-   - Spawn at the starting dock in a boat
-   - Use the provided forklift to pick up the pallet
-   - Load the pallet onto the boat
-   - Return the forklift to its original location
+1. **Start Job** (`/startdelivery`)
+   - Select your ship from available unlocked vessels
+   - Choose cargo type based on your tier
+   - Pick a route matching your ship's tier
 
-2. **Transport Phase**:
-   - Drive the boat to the delivery destination
-   - Wait for the delivery site pallet to spawn
+2. **Pickup Phase**
+   - Teleport to start location in your ship
+   - Locate the cargo pallet (waypoint provided)
+   - Use forklift to load cargo onto boat
 
-3. **Delivery Phase**: 
-   - Unload the cargo at the delivery site
-   - Receive payment based on distance and consecutive deliveries
+3. **Delivery Phase**
+   - Navigate to destination port
+   - Manage fuel consumption
+   - Avoid damage (especially with fragile cargo)
+   - Weather affects handling and visibility
 
-### Completing a Delivery
+4. **Completion**
+   - Unload cargo at delivery site
+   - Receive payment with bonuses/penalties
+   - Earn XP toward next level
 
-The job is completed when the player successfully delivers the pallet to the destination. Players will receive higher payouts for consecutive deliveries, with a bonus for completing a series of 4 deliveries.
+## Level Progression
 
-### Commands
+| Level | Title | XP Required | Tier |
+|-------|-------|-------------|------|
+| 1 | Deckhand | 0 | 1 |
+| 2 | Sailor | 500 | 1 |
+| 3 | Boatswain | 1,500 | 1 |
+| 4 | Helmsman | 3,000 | 2 |
+| 5 | Navigator | 5,000 | 2 |
+| 6 | First Mate | 8,000 | 2 |
+| 7 | Captain | 12,000 | 3 |
+| 8 | Master Mariner | 18,000 | 3 |
+| 9 | Fleet Admiral | 25,000 | 3 |
+| 10 | Legendary Captain | 35,000 | 3 |
 
-- `/startdelivery` - Start a new delivery job
-- `/enddelivery` - Cancel your current delivery job
-- `/deliverystats` - Check your delivery statistics (total deliveries, distance traveled)
-- `/resetdelivery [player_id]` - Admin command to reset a player's delivery job
+## Roadmap
 
-### Resetting the Delivery Count
+### Planned Features
+- [ ] Fleet ownership (buy/maintain multiple ships)
+- [ ] Supply/demand dynamic pricing
+- [ ] Random encounters (pirates, coast guard)
+- [ ] Crew system (hire NPCs)
+- [ ] Ship customization/upgrades
+- [ ] Refueling at port fuel stations
+- [ ] Phone app integration
 
-The delivery count can be reset by triggering the `cargo:resetDeliveryCount` event or using the admin command.
+## Support
 
-## Time Limitations
+For issues and feature requests, please open an issue on GitHub.
 
-- Players have 15 minutes to begin moving items with a forklift, or the job will end
-- Players have 15 minutes to deliver the cargo at the destination, or the job will fail
-- Destruction of the delivery boat will result in job failure
+## License
 
-## Developer Information
+MIT License - See LICENSE file for details.
 
-### Events
+## Credits
 
-- `cargo:startDelivery` - Start a delivery job
-- `cargo:deliveryComplete` - Complete a delivery job
-- `cargo:resetDeliveryCount` - Reset delivery count
-- `cargo:movePallet` - Spawn a forklift to move pallets
-- `cargo:jobStarted` - Notify server of job start (persistence)
-- `cargo:jobCompleted` - Notify server of job completion
-
-### Callbacks
-
-- `cargo:getDeliveryCount` - Get current delivery count for player
-- `cargo:getTotalEarnings` - Get total earnings from deliveries
-
-## Planned Future Functionality
-
-- Integration with delivery scripts that provide sales stock to stores around Los Santos, including:
-  - Convenience stores
-  - Clothing stores
-  - Bars
-  - Restaurants
-  - Vehicle dealerships
-  - Other businesses
-  - Some stock items will only come from certain locations, simulating international imports. 
-  - Examples:
-    - Certain cars only come from Cayo Perico or other locations that specialize in providing those goods
+- Original concept by DaemonAlex
+- Enhanced by Claude AI

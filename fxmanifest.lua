@@ -2,8 +2,8 @@ fx_version 'cerulean'
 game 'gta5'
 
 author 'DaemonAlex'
-description 'Ocean Delivery - Boat Cargo Delivery Job'
-version '1.1.0'
+description 'Ocean Delivery - Advanced Boat Cargo Delivery Job with Progression System'
+version '2.0.0'
 
 shared_scripts {
     'config.lua',
@@ -26,9 +26,9 @@ dependencies {
 }
 
 optional_dependencies {
-    'ox_target',  -- Enhanced interaction
-    'qs-banking', -- Banking option 1
-    'renewed-banking' -- Banking option 2
+    'ox_target',        -- Enhanced interaction
+    'qs-banking',       -- Banking option 1
+    'renewed-banking'   -- Banking option 2
 }
 
-lua54 'yes' -- Enable Lua 5.4 features
+lua54 'yes'
