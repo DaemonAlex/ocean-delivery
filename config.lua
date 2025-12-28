@@ -218,10 +218,12 @@ Config.Boats = {
         handling = 0.7,
         fuelEfficiency = 1.0,
         requiredLevel = 7,
-        description = "Luxury yacht. Slow but massive cargo space.",
+        description = "Luxury yacht. Slow but massive cargo space. Excellent stability.",
         price = 1500000,
         insurance = 75000,
         maintenance = 10000,
+        stability = 0.85,           -- 85% reduced explosion risk for hazmat
+        hazmatBonus = true,         -- Recommended for hazmat cargo
     },
     {
         label = "Tug",
@@ -232,10 +234,12 @@ Config.Boats = {
         handling = 0.5,
         fuelEfficiency = 0.6,
         requiredLevel = 8,
-        description = "Industrial tugboat. Maximum cargo capacity.",
+        description = "Industrial tugboat. Maximum cargo capacity. Built for hazardous cargo.",
         price = 2250000,
         insurance = 112500,
         maintenance = 15000,
+        stability = 0.95,           -- 95% reduced explosion risk - best for hazmat
+        hazmatBonus = true,
     },
     {
         label = "Urchin II Mega Freighter",
@@ -246,11 +250,63 @@ Config.Boats = {
         handling = 0.3,
         fuelEfficiency = 0.4,
         requiredLevel = 10,
-        description = "Massive ocean freighter. The ultimate cargo hauler for legendary captains. Slow but unmatched capacity.",
+        description = "Massive ocean freighter. The ultimate cargo hauler. Maximum stability for any cargo.",
         price = 5000000,
+        stability = 0.98,           -- 98% reduced explosion risk - safest ship
+        hazmatBonus = true,
         insurance = 250000,
         maintenance = 35000,
     },
+}
+
+-- =============================================================================
+-- BOAT STABILITY SYSTEM (Hazmat/Explosive cargo)
+-- =============================================================================
+
+Config.StabilitySystem = {
+    enabled = true,
+
+    -- Base explosion chance during rough weather (per delivery)
+    baseExplosionChance = 0.15,     -- 15% base chance with explosionRisk cargo
+
+    -- Weather modifiers for explosion risk
+    weatherRisk = {
+        clear = 0.0,                -- No extra risk
+        cloudy = 0.0,
+        rain = 0.05,                -- +5% in rain
+        thunder = 0.20,             -- +20% in thunderstorm
+        fog = 0.02,                 -- +2% in fog (reduced visibility)
+    },
+
+    -- Damage modifiers
+    damageThreshold = 0.3,          -- If boat takes 30%+ damage, risk increases
+    damageRiskBonus = 0.10,         -- +10% risk if above threshold
+
+    -- Stability bonus payouts (for hazmat-rated boats)
+    hazmatPayBonus = 1.10,          -- 10% bonus for using hazmat-rated boat
+    hazmatXPBonus = 1.15,           -- 15% XP bonus
+}
+
+-- =============================================================================
+-- DAILY MAINTENANCE COSTS (Money sink)
+-- =============================================================================
+
+Config.MaintenanceSystem = {
+    enabled = true,
+    checkInterval = 24,             -- Hours between maintenance checks
+    graceDeliveries = 3,            -- Free deliveries before maintenance kicks in
+
+    -- Maintenance cost multipliers based on usage
+    perDeliveryWear = 0.02,         -- 2% condition loss per delivery
+    weatherWearBonus = 0.01,        -- +1% extra wear in bad weather
+
+    -- Repair cost calculation
+    repairCostBase = 0.10,          -- 10% of boat price for full repair
+    emergencyRepairMultiplier = 1.5, -- 50% more if boat breaks down mid-delivery
+
+    -- Consequences for neglected maintenance
+    breakdownChance = 0.05,         -- 5% breakdown chance if condition < 25%
+    seizureThreshold = 0.10,        -- Coast guard can seize boats below 10% condition
 }
 
 -- =============================================================================
@@ -553,6 +609,16 @@ Config.GangIntegration = {
         territoryBonus = true,  -- Bonus payout if delivering to gang territory
         territoryBonusMult = 1.25,  -- 25% bonus in owned territory
     },
+
+    -- Gang cut / laundering (money sink for economy balance)
+    gangCut = {
+        enabled = true,         -- Take a cut of weapons/drug payouts
+        cutPercent = 0.15,      -- 15% goes to the "organization"
+        useBank = true,         -- Use banking system for the cut
+        bankAccount = 'gang_treasury',  -- qs-banking account name
+        launderingFee = 0.05,   -- Additional 5% "laundering" fee for illegal cargo
+        notifyPlayer = true,    -- Notify player about the cut
+    },
 }
 
 -- =============================================================================
@@ -659,14 +725,68 @@ Config.DamagePenalty = {
 -- =============================================================================
 
 Config.Ports = {
+    -- Standard public ports
     { name = "Los Santos Marina",    coords = vector3(-802.0, -1496.0, 0.0),  tier = 1, hasFuel = true },
     { name = "Vespucci Beach",       coords = vector3(-1599.0, -1097.0, 0.0), tier = 1, hasFuel = false },
     { name = "Del Perro Pier",       coords = vector3(-1619.0, -1015.0, 0.0), tier = 1, hasFuel = false },
-    { name = "Elysian Island Docks", coords = vector3(-163.0, -2378.0, 0.0),  tier = 2, hasFuel = true },
     { name = "Chumash Pier",         coords = vector3(-3426.0, 967.0, 0.0),   tier = 2, hasFuel = false },
     { name = "Galilee Marina",       coords = vector3(1299.0, 4216.0, 0.0),   tier = 2, hasFuel = false },
     { name = "Paleto Bay Pier",      coords = vector3(-275.0, 6635.0, 0.0),   tier = 3, hasFuel = true },
-    { name = "NOOSE Facility",       coords = vector3(3857.0, 4458.0, 0.0),   tier = 3, hasFuel = false },
+
+    -- Safe Harbors (Gang-controlled territories)
+    -- Lower coast guard risk, higher pirate/rival gang risk
+    {
+        name = "Elysian Island Docks",
+        coords = vector3(-163.0, -2378.0, 0.0),
+        tier = 2,
+        hasFuel = true,
+        safeHarbor = true,          -- Gang-controlled port
+        gangTerritory = "ballas",   -- Which gang controls this (for rcore_gangs)
+        coastGuardMod = 0.3,        -- 70% less coast guard encounters
+        pirateMod = 1.5,            -- 50% more pirate/rival encounters
+        illegalOnly = false,        -- Allow all cargo or just illegal
+    },
+    {
+        name = "Terminal Island",
+        coords = vector3(1208.0, -2985.0, 0.0),
+        tier = 3,
+        hasFuel = false,
+        safeHarbor = true,
+        gangTerritory = "vagos",
+        coastGuardMod = 0.2,        -- 80% less coast guard
+        pirateMod = 2.0,            -- Double pirate risk
+        illegalOnly = true,         -- Only illegal cargo accepted
+    },
+    {
+        name = "NOOSE Facility",
+        coords = vector3(3857.0, 4458.0, 0.0),
+        tier = 3,
+        hasFuel = false,
+        safeHarbor = false,
+        -- High security area - increased coast guard
+        coastGuardMod = 2.0,        -- Double coast guard here
+        pirateMod = 0.0,            -- No pirates at NOOSE
+    },
+    {
+        name = "Sandy Shores Cove",
+        coords = vector3(1538.0, 3902.0, 0.0),
+        tier = 2,
+        hasFuel = false,
+        safeHarbor = true,
+        gangTerritory = "lost_mc",
+        coastGuardMod = 0.4,
+        pirateMod = 1.8,
+        illegalOnly = true,
+    },
+}
+
+-- Safe Harbor settings
+Config.SafeHarbor = {
+    enabled = true,
+    requireGangMember = false,      -- Anyone can use, or require gang affiliation
+    gangMemberBonus = 1.15,         -- 15% bonus payout for gang members at their territory
+    rivalGangPenalty = 0.8,         -- 20% less payout for rival gang members
+    neutralBonus = 1.0,             -- No bonus/penalty for non-gang members
 }
 
 -- =============================================================================

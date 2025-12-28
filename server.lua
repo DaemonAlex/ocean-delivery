@@ -619,9 +619,65 @@ local function CompleteDelivery(src, Player, deliveryData)
 
     payout = math.floor(payout)
 
+    -- Stability bonus for hazmat-rated boats with hazmat cargo
+    local stabilityBonus = 0
+    if Config.StabilitySystem and Config.StabilitySystem.enabled then
+        if cargoType.explosionRisk and boatData.hazmatBonus then
+            local payBonus = Config.StabilitySystem.hazmatPayBonus or 1.10
+            stabilityBonus = math.floor(payout * (payBonus - 1))
+            payout = payout + stabilityBonus
+            debugPrint("Applied hazmat stability bonus: +$" .. stabilityBonus)
+        end
+    end
+
+    -- Gang cut / laundering fee (money sink for illegal cargo economy)
+    local gangCut = 0
+    local launderingFee = 0
+    if Config.GangIntegration and Config.GangIntegration.gangCut and Config.GangIntegration.gangCut.enabled then
+        if cargoType.weaponType or cargoType.drugType then
+            -- Calculate gang cut
+            local cutPercent = Config.GangIntegration.gangCut.cutPercent or 0.15
+            gangCut = math.floor(payout * cutPercent)
+
+            -- Additional laundering fee for illegal cargo
+            if cargoType.illegal then
+                local launderPercent = Config.GangIntegration.gangCut.launderingFee or 0.05
+                launderingFee = math.floor(payout * launderPercent)
+            end
+
+            -- Deduct from payout
+            payout = payout - gangCut - launderingFee
+
+            -- Send cut to gang treasury if using banking
+            if Config.GangIntegration.gangCut.useBank then
+                local bankAccount = Config.GangIntegration.gangCut.bankAccount or 'gang_treasury'
+                -- Try qs-banking or renewed-banking
+                if exports['qs-banking'] then
+                    pcall(function()
+                        exports['qs-banking']:AddMoney(bankAccount, gangCut + launderingFee)
+                    end)
+                elseif exports['renewed-banking'] then
+                    pcall(function()
+                        exports['renewed-banking']:addAccountMoney(bankAccount, gangCut + launderingFee)
+                    end)
+                end
+            end
+
+            debugPrint("Gang cut: $" .. gangCut .. ", Laundering fee: $" .. launderingFee)
+        end
+    end
+
     -- Calculate XP
     local baseXP = Config.XPPerDelivery + (distance * Config.XPPerDistance)
     local xpEarned = math.floor(baseXP * cargoType.xpMultiplier)
+
+    -- Stability XP bonus for hazmat boats
+    if Config.StabilitySystem and Config.StabilitySystem.enabled then
+        if cargoType.explosionRisk and boatData.hazmatBonus then
+            local xpBonus = Config.StabilitySystem.hazmatXPBonus or 1.15
+            xpEarned = math.floor(xpEarned * xpBonus)
+        end
+    end
 
     -- Bonus XP for series completion
     if stats.current_streak % 4 == 0 then
@@ -650,11 +706,21 @@ local function CompleteDelivery(src, Player, deliveryData)
             seriesBonus = seriesBonus,
             weatherBonus = math.floor(basePay * weatherBonus),
             damagePenalty = math.floor(basePay * damagePenalty),
+            stabilityBonus = stabilityBonus,
+            gangCut = gangCut,
+            launderingFee = launderingFee,
             xpEarned = xpEarned,
             totalXP = newXP,
             level = newLevel,
             streak = stats.current_streak
         })
+
+        -- Notify about gang cut if applicable
+        if Config.GangIntegration and Config.GangIntegration.gangCut and Config.GangIntegration.gangCut.notifyPlayer then
+            if gangCut > 0 or launderingFee > 0 then
+                TriggerClientEvent('QBCore:Notify', src, 'Organization cut: $' .. (gangCut + launderingFee), 'info')
+            end
+        end
 
         -- Drug system integration (DPSRP 1.5)
         if Config.DrugIntegration and Config.DrugIntegration.enabled and cargoType.drugType then
