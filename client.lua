@@ -205,6 +205,92 @@ CreateThread(function()
 end)
 
 -- =============================================================================
+-- VISUAL CARGO SYSTEM (Props on boats)
+-- =============================================================================
+
+local cargoProps = {} -- Track spawned cargo props for cleanup
+
+-- Spawn visual cargo props on boat
+local function SpawnVisualCargo(boat, cargo, boatModel)
+    if not Config.VisualCargo or not Config.VisualCargo.enabled then return end
+    if not boat or not DoesEntityExist(boat) then return end
+    if not cargo then return end
+
+    -- Clean up existing props first
+    CleanupVisualCargo()
+
+    -- Get prop config for this cargo type
+    local propConfig = Config.VisualCargo.cargoProps[cargo.id] or Config.VisualCargo.defaultProp
+    if not propConfig then return end
+
+    -- Get attachment points for this boat model
+    local modelName = string.lower(boatModel or "")
+    local attachPoints = Config.VisualCargo.boatAttachPoints[modelName]
+    if not attachPoints then
+        attachPoints = { Config.VisualCargo.defaultAttachPoint }
+    end
+
+    -- Calculate how many props to spawn based on cargo weight
+    local numProps = 1
+    if Config.VisualCargo.scaleByWeight and cargo.weight then
+        numProps = math.min(math.ceil(cargo.weight), Config.VisualCargo.maxProps, #attachPoints)
+    end
+
+    -- Load prop model
+    local propModel = GetHashKey(propConfig.model)
+    RequestModel(propModel)
+    local timeout = 0
+    while not HasModelLoaded(propModel) and timeout < 50 do
+        Wait(100)
+        timeout = timeout + 1
+    end
+
+    if not HasModelLoaded(propModel) then
+        debugPrint("Failed to load cargo prop model: " .. propConfig.model)
+        return
+    end
+
+    -- Spawn and attach props
+    for i = 1, numProps do
+        local attachPoint = attachPoints[i] or attachPoints[1]
+        local offset = attachPoint.offset
+        local rotation = attachPoint.rotation or vector3(0, 0, 0)
+
+        -- Create prop
+        local prop = CreateObject(propModel, 0, 0, 0, true, true, false)
+        if prop and DoesEntityExist(prop) then
+            SetEntityAsMissionEntity(prop, true, true)
+
+            -- Attach to boat
+            AttachEntityToEntity(prop, boat,
+                GetEntityBoneIndexByName(boat, "chassis"),
+                offset.x, offset.y, offset.z,
+                rotation.x, rotation.y, rotation.z,
+                false, false, false, false, 2, true
+            )
+
+            table.insert(cargoProps, prop)
+            debugPrint(string.format("Spawned cargo prop %d/%d at offset (%.1f, %.1f, %.1f)", i, numProps, offset.x, offset.y, offset.z))
+        end
+    end
+
+    SetModelAsNoLongerNeeded(propModel)
+    debugPrint(string.format("Visual cargo spawned: %d props for %s", #cargoProps, cargo.id))
+end
+
+-- Clean up visual cargo props
+local function CleanupVisualCargo()
+    for _, prop in ipairs(cargoProps) do
+        if prop and DoesEntityExist(prop) then
+            DetachEntity(prop, false, false)
+            DeleteEntity(prop)
+        end
+    end
+    cargoProps = {}
+    debugPrint("Visual cargo props cleaned up")
+end
+
+-- =============================================================================
 -- WEATHER DETECTION
 -- =============================================================================
 
@@ -595,6 +681,11 @@ local function spawnBoat(routeData, boatData)
     -- Apply handling modifiers based on cargo weight and heavy load physics
     ApplyCargoPhysics(boat, selectedCargo)
 
+    -- Spawn visual cargo props on deck
+    if selectedBoat and selectedBoat.model then
+        SpawnVisualCargo(boat, selectedCargo, selectedBoat.model)
+    end
+
     TriggerServerEvent('cargo:saveBoatEntity', NetworkGetNetworkIdFromEntity(boat))
 
     return boat
@@ -756,6 +847,9 @@ local function endDeliveryJob()
         deliverySitePalletProp = nil
     end
 
+    -- Clean up visual cargo props
+    CleanupVisualCargo()
+
     if currentBoat then
         SetEntityAsNoLongerNeeded(currentBoat)
         currentBoat = nil
@@ -771,6 +865,7 @@ local function endDeliveryJob()
     endLocation = nil
     cargoDamage = 0
     currentFuel = 1.0
+    isHeavyLoad = false
 
     TriggerServerEvent('cargo:jobCompleted')
 end

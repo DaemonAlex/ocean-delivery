@@ -404,6 +404,175 @@ Config.HeavyLoadPhysics = {
 }
 
 -- =============================================================================
+-- MULTI-CREW SYSTEM
+-- =============================================================================
+
+Config.MultiCrew = {
+    enabled = true,
+
+    -- Crew size limits by boat capacity
+    useBoatCapacity = true,         -- Use boat's capacity stat for max crew
+    maxCrewOverride = 4,            -- Hard limit if not using boat capacity
+
+    -- XP sharing
+    xpShareEnabled = true,
+    captainXPShare = 1.0,           -- Captain gets 100% XP
+    crewXPShare = 0.75,             -- Crew members get 75% XP
+    bonusPerCrewMember = 0.05,      -- +5% XP per crew member (teamwork bonus)
+
+    -- Payout sharing
+    payoutShareEnabled = true,
+    captainPayShare = 0.50,         -- Captain gets 50% of payout
+    crewPayShare = 0.50,            -- Remaining 50% split among crew
+    equalSplit = false,             -- If true, everyone gets equal share
+
+    -- Crew bonuses
+    pirateDefenseBonus = 0.15,      -- +15% chance to escape pirates per crew member
+    speedBonusPerCrew = 0.02,       -- +2% speed per crew (more hands on deck)
+    maxSpeedBonus = 0.10,           -- Cap at +10% speed bonus
+
+    -- Recruitment
+    inviteRadius = 50.0,            -- How close to invite crew
+    inviteTimeout = 30,             -- Seconds to accept invite
+    canInviteMidJob = false,        -- Allow inviting crew after job starts
+
+    -- Crew roles (future expansion)
+    roles = {
+        captain = { payMult = 1.2, xpMult = 1.0 },
+        navigator = { payMult = 1.0, xpMult = 1.1 },
+        gunner = { payMult = 1.0, xpMult = 1.0, pirateDefense = 0.25 },
+        deckhand = { payMult = 0.9, xpMult = 0.9 },
+    },
+}
+
+-- =============================================================================
+-- DYNAMIC MARKET SYSTEM (Supply/Demand)
+-- =============================================================================
+
+Config.DynamicMarket = {
+    enabled = true,
+
+    -- Market update frequency
+    updateInterval = 30,            -- Minutes between market updates
+    priceMemory = 60,               -- Minutes to remember delivery history
+
+    -- Price fluctuation ranges
+    minMultiplier = 0.7,            -- Minimum 70% of base price (oversupply)
+    maxMultiplier = 1.5,            -- Maximum 150% of base price (high demand)
+
+    -- Supply impact (more deliveries = lower price)
+    deliveriesForOversupply = 10,   -- This many deliveries = oversupply
+    oversupplyDecay = 0.1,          -- 10% price drop per delivery over threshold
+
+    -- Demand spikes (random high-demand events)
+    demandSpikeEnabled = true,
+    demandSpikeChance = 0.10,       -- 10% chance per update
+    demandSpikeMult = 1.35,         -- 35% bonus during spike
+    demandSpikeDuration = 15,       -- Minutes
+
+    -- Cargo-specific demand modifiers
+    cargoBaseDemand = {
+        seafood = 1.1,              -- Always slightly higher demand
+        restaurant_supplies = 1.0,
+        boutique_clothing = 0.9,    -- Niche market
+        vehicle_parts = 1.0,
+        yacht_provisions = 0.85,    -- Luxury = limited market
+        nightclub_supplies = 1.15,  -- Party city always needs supplies
+    },
+
+    -- Time-of-day demand (server time)
+    timeOfDayDemand = {
+        { start = 6, stop = 12, cargo = "restaurant_supplies", mult = 1.2 },  -- Morning deliveries
+        { start = 18, stop = 23, cargo = "nightclub_supplies", mult = 1.3 }, -- Evening club rush
+        { start = 20, stop = 4, cargo = "contraband", mult = 1.25 },         -- Night smuggling
+    },
+
+    -- Display market prices to players
+    showMarketPrices = true,
+    marketRefreshCost = 500,        -- Cost to refresh market data
+}
+
+-- =============================================================================
+-- VISUAL CARGO SYSTEM (Props on boats)
+-- =============================================================================
+
+Config.VisualCargo = {
+    enabled = true,
+
+    -- Prop attachment settings
+    attachToBoat = true,
+    scaleByWeight = true,           -- Heavier cargo = larger props
+    maxProps = 6,                   -- Maximum props per boat
+
+    -- Boat-specific attachment points (local offsets from boat center)
+    boatAttachPoints = {
+        dinghy = {
+            { offset = vector3(0.0, -0.5, 0.3), rotation = vector3(0, 0, 0) },
+        },
+        speeder = {
+            { offset = vector3(0.0, -1.0, 0.4), rotation = vector3(0, 0, 0) },
+            { offset = vector3(0.0, -1.8, 0.4), rotation = vector3(0, 0, 0) },
+        },
+        marquis = {
+            { offset = vector3(0.0, -2.0, 1.2), rotation = vector3(0, 0, 0) },
+            { offset = vector3(1.0, -2.0, 1.2), rotation = vector3(0, 0, 0) },
+            { offset = vector3(-1.0, -2.0, 1.2), rotation = vector3(0, 0, 0) },
+            { offset = vector3(0.0, -4.0, 1.2), rotation = vector3(0, 0, 0) },
+        },
+        tug = {
+            { offset = vector3(0.0, -5.0, 2.5), rotation = vector3(0, 0, 0) },
+            { offset = vector3(2.0, -5.0, 2.5), rotation = vector3(0, 0, 0) },
+            { offset = vector3(-2.0, -5.0, 2.5), rotation = vector3(0, 0, 0) },
+            { offset = vector3(0.0, -8.0, 2.5), rotation = vector3(0, 0, 0) },
+            { offset = vector3(2.0, -8.0, 2.5), rotation = vector3(0, 0, 0) },
+            { offset = vector3(-2.0, -8.0, 2.5), rotation = vector3(0, 0, 0) },
+        },
+    },
+
+    -- Default attachment for unknown boats
+    defaultAttachPoint = { offset = vector3(0.0, -1.5, 0.5), rotation = vector3(0, 0, 0) },
+
+    -- Cargo-specific props
+    cargoProps = {
+        -- Standard cargo
+        standard = { model = "prop_boxpile_07d", scale = 1.0 },
+        electronics = { model = "prop_box_wood01a", scale = 0.8 },
+        seafood = { model = "prop_fish_slice_01", scale = 1.2 },
+        medical = { model = "prop_medcase_01", scale = 0.9 },
+
+        -- Illegal cargo
+        contraband = { model = "prop_box_wood04a", scale = 1.0 },
+        weapons = { model = "prop_mil_crate_01", scale = 1.0 },      -- Military crate
+        cocaine_raw = { model = "prop_drug_package", scale = 0.8 },
+        weed_bales = { model = "prop_weed_01", scale = 1.5 },
+        meth_precursors = { model = "prop_barrel_02a", scale = 1.0 }, -- Chemical barrel
+        drug_shipment = { model = "prop_drug_package", scale = 1.0 },
+
+        -- Weapons
+        gun_parts = { model = "prop_box_guncase_01a", scale = 0.9 },
+        pistol_crate = { model = "prop_box_ammo04a", scale = 1.0 },
+        smg_crate = { model = "prop_box_ammo04a", scale = 1.1 },
+        rifle_crate = { model = "prop_mil_crate_01", scale = 1.2 },
+        ammo_crate = { model = "prop_box_ammo07a", scale = 1.0 },
+
+        -- Business cargo
+        restaurant_supplies = { model = "prop_food_cb_donuts", scale = 1.0 },
+        boutique_clothing = { model = "prop_cs_cardbox_01", scale = 0.9 },
+        vehicle_parts = { model = "prop_car_engine_01", scale = 1.2 },
+        supercar_parts = { model = "prop_car_engine_01", scale = 1.4 },
+        nightclub_supplies = { model = "prop_beer_box_01", scale = 1.0 },
+        yacht_provisions = { model = "prop_foodwrap_01", scale = 0.8 },
+
+        -- Hazmat
+        hazmat = { model = "prop_barrel_02a", scale = 1.0, color = {255, 255, 0} }, -- Yellow barrel
+        luxury = { model = "prop_ld_case_01", scale = 0.8 },
+    },
+
+    -- Fallback prop for unknown cargo
+    defaultProp = { model = "prop_boxpile_07d", scale = 1.0 },
+}
+
+-- =============================================================================
 -- CARGO TYPES
 -- =============================================================================
 
