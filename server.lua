@@ -1751,14 +1751,31 @@ RegisterNetEvent('cargo:policeAlert', function(coords, cargoType)
         finalChance = baseChance * multiplier
     end
 
+    -- Off-peak hours scaling (keeps economy fair during low-pop times)
+    local isOffPeak = false
+    if Config.PoliceIntegration.timeBasedScaling then
+        local currentHour = tonumber(os.date("%H"))
+        local offPeakHours = Config.PoliceIntegration.offPeakHours or {}
+        for _, hour in ipairs(offPeakHours) do
+            if currentHour == hour then
+                isOffPeak = true
+                break
+            end
+        end
+        if isOffPeak then
+            local offPeakMult = Config.PoliceIntegration.offPeakMultiplier or 0.5
+            finalChance = finalChance * offPeakMult
+        end
+    end
+
     -- Roll against adjusted chance
     local roll = math.random()
     if roll > finalChance then
-        debugPrint(string.format("Police roll failed: %.2f > %.2f (base: %.2f, cops: %d)", roll, finalChance, baseChance, policeCount))
+        debugPrint(string.format("Police roll failed: %.2f > %.2f (base: %.2f, cops: %d, offPeak: %s)", roll, finalChance, baseChance, policeCount, tostring(isOffPeak)))
         return
     end
 
-    debugPrint(string.format("Police roll success: %.2f <= %.2f (base: %.2f, cops: %d)", roll, finalChance, baseChance, policeCount))
+    debugPrint(string.format("Police roll success: %.2f <= %.2f (base: %.2f, cops: %d, offPeak: %s)", roll, finalChance, baseChance, policeCount, tostring(isOffPeak)))
 
     -- Handle no cops online - spawn NPC coast guard instead
     if policeCount < Config.PoliceIntegration.minCops then
@@ -1929,6 +1946,105 @@ QBCore.Commands.Add('setdeliverylevel', 'Set a player\'s delivery level (Admin O
         TriggerClientEvent('QBCore:Notify', targetId, "Your delivery level has been set to " .. newLevel, "info")
     else
         TriggerClientEvent('QBCore:Notify', src, "Player not found", "error")
+    end
+end)
+
+-- =============================================================================
+-- ORPHANED ENTITY CLEANUP (High-pop server optimization)
+-- =============================================================================
+
+-- Track spawned entities per player for cleanup
+local spawnedEntities = {}
+
+-- Register spawned entity for tracking
+RegisterNetEvent('cargo:registerEntity', function(entityNetId)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+
+    local citizenid = Player.PlayerData.citizenid
+    if not spawnedEntities[citizenid] then
+        spawnedEntities[citizenid] = {}
+    end
+    table.insert(spawnedEntities[citizenid], {
+        netId = entityNetId,
+        spawnTime = os.time(),
+        owner = src
+    })
+end)
+
+-- Cleanup entities when player disconnects
+AddEventHandler('playerDropped', function()
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    if not Player then return end
+
+    local citizenid = Player.PlayerData.citizenid
+
+    -- Clean up any active jobs
+    if activeJobs[citizenid] then
+        activeJobs[citizenid] = nil
+        debugPrint("Cleaned up active job for disconnected player: " .. citizenid)
+    end
+
+    if activeBoats[citizenid] then
+        activeBoats[citizenid] = nil
+        debugPrint("Cleaned up active boat for disconnected player: " .. citizenid)
+    end
+
+    -- Remove entity tracking
+    if spawnedEntities[citizenid] then
+        debugPrint("Cleaned up " .. #spawnedEntities[citizenid] .. " tracked entities for: " .. citizenid)
+        spawnedEntities[citizenid] = nil
+    end
+end)
+
+-- Server-side entity sweep (runs every 10 minutes)
+-- Cleans up orphaned boats/NPCs when player crashes or disconnects
+CreateThread(function()
+    local SWEEP_INTERVAL = 10 * 60 * 1000  -- 10 minutes
+    local MAX_ENTITY_AGE = 30 * 60         -- 30 minutes max lifetime
+
+    while true do
+        Wait(SWEEP_INTERVAL)
+
+        local currentTime = os.time()
+        local cleanedCount = 0
+
+        for citizenid, entities in pairs(spawnedEntities) do
+            -- Check if player is still online
+            local playerOnline = false
+            local players = QBCore.Functions.GetPlayers()
+            for _, playerId in ipairs(players) do
+                local player = QBCore.Functions.GetPlayer(playerId)
+                if player and player.PlayerData.citizenid == citizenid then
+                    playerOnline = true
+                    break
+                end
+            end
+
+            if not playerOnline then
+                -- Player disconnected - clean up their entities
+                debugPrint("Sweeping orphaned entities for offline player: " .. citizenid)
+                spawnedEntities[citizenid] = nil
+                cleanedCount = cleanedCount + 1
+            else
+                -- Player online - clean up old entities
+                local validEntities = {}
+                for _, entity in ipairs(entities) do
+                    if (currentTime - entity.spawnTime) < MAX_ENTITY_AGE then
+                        table.insert(validEntities, entity)
+                    else
+                        cleanedCount = cleanedCount + 1
+                    end
+                end
+                spawnedEntities[citizenid] = validEntities
+            end
+        end
+
+        if cleanedCount > 0 then
+            debugPrint("Entity sweep completed - cleaned " .. cleanedCount .. " orphaned/stale entries")
+        end
     end
 end)
 

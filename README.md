@@ -170,7 +170,8 @@ Config.FleetOwnership = {
 -- Random Encounters
 Config.RandomEncounters = {
     enabled = true,
-    checkInterval = 30000,         -- Every 30 seconds
+    checkInterval = 60000,         -- Every 60 seconds (optimized for high-pop)
+    entityCullDistance = 200.0,    -- Auto-cleanup distance for encounter NPCs
     minDistanceFromPort = 500,     -- Safety zone
 }
 

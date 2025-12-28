@@ -523,8 +523,13 @@ Config.PoliceIntegration = {
     -- Dynamic risk based on police count (DPSRP optimization)
     dynamicRisk = true,           -- Adjust risk based on online police
     noCopsAlternative = true,     -- If no cops online, spawn NPC Coast Guard instead
-    riskPerCop = 0.02,            -- +2% police chance per online cop (max from policeChance)
+    riskPerCop = 0.02,            -- +2% police chance per online cop
     maxRiskMultiplier = 2.0,      -- Maximum 2x the base policeChance
+
+    -- Off-peak hours scaling (keeps economy fair during low-pop hours)
+    timeBasedScaling = true,      -- Enable time-of-day risk adjustment
+    offPeakHours = {0, 1, 2, 3, 4, 5, 6, 7},  -- Server hours considered off-peak (midnight-7am)
+    offPeakMultiplier = 0.5,      -- 50% police chance during off-peak (e.g., 25% -> 12.5% for weapons)
 }
 
 -- =============================================================================
