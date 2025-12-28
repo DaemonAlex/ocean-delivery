@@ -675,6 +675,49 @@ local function CompleteDelivery(src, Player, deliveryData)
                 end
             end
         end
+
+        -- Gang/Weapons system integration (DPSRP 1.5 - rcore_gangs)
+        if Config.GangIntegration and Config.GangIntegration.enabled and cargoType.weaponType then
+            local weaponType = cargoType.weaponType
+            local weaponAmount = cargoType.weaponAmount or 1
+
+            if Config.GangIntegration.useEvent then
+                -- Trigger custom event for gang script
+                TriggerEvent(Config.GangIntegration.eventName, src, citizenid, weaponType, weaponAmount, cargoType.id)
+                debugPrint("Triggered gang weapon event: " .. weaponType .. " x" .. weaponAmount)
+
+            elseif Config.GangIntegration.rcoreGangs and Config.GangIntegration.rcoreGangs.enabled then
+                -- rcore_gangs integration
+                local gangData = exports['rcore_gangs']:GetPlayerGang(src)
+                if gangData and gangData.name then
+                    if Config.GangIntegration.rcoreGangs.addToGangStash then
+                        -- Add to gang stash
+                        local itemName = Config.GangIntegration.items[weaponType]
+                        if itemName then
+                            exports['rcore_gangs']:AddItemToGangStash(gangData.name, itemName, weaponAmount)
+                            TriggerClientEvent('QBCore:Notify', src, 'Weapons added to gang stash', 'success')
+                            debugPrint("Added to gang stash: " .. itemName .. " x" .. weaponAmount .. " for " .. gangData.name)
+                        end
+                    else
+                        -- Give to player
+                        local itemName = Config.GangIntegration.items[weaponType]
+                        if itemName then
+                            Player.Functions.AddItem(itemName, weaponAmount)
+                            TriggerClientEvent('inventory:client:ItemBox', src, QBCore.Shared.Items[itemName], 'add', weaponAmount)
+                            debugPrint("Gave weapons: " .. itemName .. " x" .. weaponAmount)
+                        end
+                    end
+                end
+            else
+                -- Give items directly to player
+                local itemName = Config.GangIntegration.items[weaponType]
+                if itemName then
+                    Player.Functions.AddItem(itemName, weaponAmount)
+                    TriggerClientEvent('inventory:client:ItemBox', src, QBCore.Shared.Items[itemName], 'add', weaponAmount)
+                    debugPrint("Gave weapons: " .. itemName .. " x" .. weaponAmount)
+                end
+            end
+        end
     end
 
     -- Log delivery to history

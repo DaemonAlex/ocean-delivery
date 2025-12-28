@@ -425,6 +425,85 @@ Config.CargoTypes = {
         drugType = "mixed",     -- Could be any processed drug
         drugAmount = 75,
     },
+
+    -- ===========================================
+    -- WEAPONS CARGO (Feeds into gang systems)
+    -- ===========================================
+    {
+        id = "gun_parts",
+        label = "Disassembled Firearms",
+        description = "Gun parts for assembly - needs a workshop",
+        payMultiplier = 3.5,
+        xpMultiplier = 2.0,
+        weight = 1.5,
+        fragile = false,
+        illegal = true,
+        perishable = false,
+        minTier = 2,
+        policeChance = 0.20,    -- 20% - parts look like scrap
+        weaponType = "parts",   -- For gang system integration
+        weaponAmount = 10,      -- Gun part kits
+    },
+    {
+        id = "pistol_crate",
+        label = "Handgun Shipment",
+        description = "Crate of street pistols - gang favorite",
+        payMultiplier = 4.0,
+        xpMultiplier = 2.2,
+        weight = 1.2,
+        fragile = false,
+        illegal = true,
+        perishable = false,
+        minTier = 2,
+        policeChance = 0.25,
+        weaponType = "pistol",
+        weaponAmount = 8,       -- Pistols in crate
+    },
+    {
+        id = "smg_crate",
+        label = "SMG Shipment",
+        description = "Submachine guns - serious firepower",
+        payMultiplier = 5.0,
+        xpMultiplier = 2.8,
+        weight = 1.8,
+        fragile = false,
+        illegal = true,
+        perishable = false,
+        minTier = 3,
+        policeChance = 0.30,
+        weaponType = "smg",
+        weaponAmount = 5,
+    },
+    {
+        id = "rifle_crate",
+        label = "Assault Rifles",
+        description = "Military-grade rifles - maximum heat",
+        payMultiplier = 6.0,
+        xpMultiplier = 3.5,
+        weight = 2.5,
+        fragile = false,
+        illegal = true,
+        perishable = false,
+        minTier = 4,
+        policeChance = 0.40,    -- 40% - feds are watching
+        weaponType = "rifle",
+        weaponAmount = 4,
+    },
+    {
+        id = "ammo_crate",
+        label = "Ammunition Crate",
+        description = "Bulk ammo supply for the streets",
+        payMultiplier = 2.5,
+        xpMultiplier = 1.5,
+        weight = 2.0,           -- Heavy
+        fragile = false,
+        illegal = true,
+        perishable = false,
+        minTier = 2,
+        policeChance = 0.15,    -- Lower risk than guns
+        weaponType = "ammo",
+        weaponAmount = 500,     -- Rounds of ammo
+    },
 }
 
 -- Drug system integration (DPSRP 1.5)
@@ -443,6 +522,37 @@ Config.DrugIntegration = {
     -- Alternative: Trigger event instead of giving items
     useEvent = false,
     eventName = 'drugs:server:receivedShipment',  -- Your drug script's event
+}
+
+-- Gang/Weapons system integration (DPSRP 1.5 - rcore_gangs)
+Config.GangIntegration = {
+    enabled = false,            -- Set true to give weapons on delivery
+    script = 'none',            -- Options: 'rcore_gangs', 'qb-gangs', 'custom'
+
+    -- Require gang membership for weapons cargo
+    requireGangMember = true,   -- Only gang members can accept weapon deliveries
+    gangJobName = 'gang',       -- Job name to check (or use gang system API)
+
+    -- Item names for each weapon type (adjust to match your items)
+    items = {
+        parts = 'weapon_parts',
+        pistol = 'weapon_pistol',
+        smg = 'weapon_smg',
+        rifle = 'weapon_carbinerifle',
+        ammo = 'ammo_9mm',
+    },
+
+    -- Alternative: Trigger event for gang script integration
+    useEvent = false,
+    eventName = 'gangs:server:weaponShipment',  -- Your gang script's event
+
+    -- rcore_gangs specific settings
+    rcoreGangs = {
+        enabled = false,        -- Use rcore_gangs API
+        addToGangStash = true,  -- Add weapons to gang stash instead of player
+        territoryBonus = true,  -- Bonus payout if delivering to gang territory
+        territoryBonusMult = 1.25,  -- 25% bonus in owned territory
+    },
 }
 
 -- =============================================================================
