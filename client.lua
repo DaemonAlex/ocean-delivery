@@ -943,6 +943,32 @@ RegisterNetEvent('cargo:starterBoatGranted', function(data)
     })
 end)
 
+-- NPC Coast Guard spawn (when no cops online - DPSRP optimization)
+RegisterNetEvent('cargo:spawnCoastGuard', function(coords)
+    if activeEncounter or not currentBoat then return end
+
+    -- Get coast guard encounter config
+    local coastGuardEncounter = nil
+    for _, encounter in ipairs(Config.RandomEncounters.encounters) do
+        if encounter.id == "coastguard" then
+            coastGuardEncounter = encounter
+            break
+        end
+    end
+
+    if not coastGuardEncounter then
+        -- Fallback default config
+        coastGuardEncounter = {
+            id = "coastguard",
+            vehicleModel = "predator",
+            pedModel = "s_m_y_uscg_01",
+            attackerCount = 2
+        }
+    end
+
+    spawnCoastGuardEncounter(coastGuardEncounter)
+end)
+
 -- =============================================================================
 -- FLEET MANAGEMENT UI
 -- =============================================================================

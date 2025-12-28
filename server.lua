@@ -1712,7 +1712,7 @@ RegisterNetEvent('cargo:logEncounter', function(encounterType, outcome, reward, 
     end
 end)
 
--- Police alert for illegal cargo
+-- Police alert for illegal cargo (DPSRP 1.5: Dynamic risk based on cop count)
 RegisterNetEvent('cargo:policeAlert', function(coords, cargoType)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
@@ -1720,6 +1720,15 @@ RegisterNetEvent('cargo:policeAlert', function(coords, cargoType)
 
     if not Config.PoliceIntegration.enabled or not Config.PoliceIntegration.alertPolice then
         return
+    end
+
+    -- Get base police chance from cargo type
+    local baseChance = 0.15 -- Default 15%
+    for _, cargo in ipairs(Config.CargoTypes) do
+        if cargo.id == cargoType and cargo.policeChance then
+            baseChance = cargo.policeChance
+            break
+        end
     end
 
     -- Get online police count
@@ -1733,13 +1742,38 @@ RegisterNetEvent('cargo:policeAlert', function(coords, cargoType)
         end
     end
 
-    if policeCount >= Config.PoliceIntegration.minCops then
-        -- Alert all police
-        for _, playerId in ipairs(players) do
-            local targetPlayer = QBCore.Functions.GetPlayer(playerId)
-            if targetPlayer and targetPlayer.PlayerData.job.name == 'police' then
-                TriggerClientEvent('cargo:policeNotification', playerId, coords, cargoType)
-            end
+    -- Dynamic risk calculation (DPSRP optimization)
+    local finalChance = baseChance
+    if Config.PoliceIntegration.dynamicRisk then
+        local riskPerCop = Config.PoliceIntegration.riskPerCop or 0.02
+        local maxMultiplier = Config.PoliceIntegration.maxRiskMultiplier or 2.0
+        local multiplier = math.min(1 + (policeCount * riskPerCop), maxMultiplier)
+        finalChance = baseChance * multiplier
+    end
+
+    -- Roll against adjusted chance
+    local roll = math.random()
+    if roll > finalChance then
+        debugPrint(string.format("Police roll failed: %.2f > %.2f (base: %.2f, cops: %d)", roll, finalChance, baseChance, policeCount))
+        return
+    end
+
+    debugPrint(string.format("Police roll success: %.2f <= %.2f (base: %.2f, cops: %d)", roll, finalChance, baseChance, policeCount))
+
+    -- Handle no cops online - spawn NPC coast guard instead
+    if policeCount < Config.PoliceIntegration.minCops then
+        if Config.PoliceIntegration.noCopsAlternative then
+            TriggerClientEvent('cargo:spawnCoastGuard', src, coords)
+            debugPrint("No cops online - spawning NPC coast guard")
+        end
+        return
+    end
+
+    -- Alert all online police
+    for _, playerId in ipairs(players) do
+        local targetPlayer = QBCore.Functions.GetPlayer(playerId)
+        if targetPlayer and targetPlayer.PlayerData.job.name == 'police' then
+            TriggerClientEvent('cargo:policeNotification', playerId, coords, cargoType)
         end
     end
 end)
