@@ -71,20 +71,20 @@ Config.ShipTiers = {
 Config.Boats = {
     -- Tier 1: Coastal (levels 1-3)
     {
-        label = "Coastal",
+        label = "Coastal Ship",
         model = "costal",
         tier = 1,
         speed = 65,
         capacity = 2,
         handling = 1.0,
         fuelEfficiency = 1.0,
-        description = "Standard coastal fishing boat. Reliable and steady.",
+        description = "Standard coastal fishing ship. Reliable and steady.",
         price = 35000,
         insurance = 1750,
         maintenance = 250,
     },
     {
-        label = "Coastal II Premium",
+        label = "Coastal II Premium Ship",
         model = "costal2",
         tier = 2,
         speed = 85,
@@ -92,7 +92,7 @@ Config.Boats = {
         handling = 0.85,
         fuelEfficiency = 0.75,
         requiredLevel = 5,
-        description = "Premium cargo vessel. Massive hold, powerful engine, built for serious haulers.",
+        description = "Premium cargo ship. Massive hold, powerful engine, built for serious haulers.",
         price = 450000,
         insurance = 22500,
         maintenance = 3000,
@@ -508,6 +508,18 @@ Config.VisualCargo = {
     boatAttachPoints = {
         dinghy = {
             { offset = vector3(0.0, -0.5, 0.3), rotation = vector3(0, 0, 0) },
+        },
+        costal = {
+            { offset = vector3(0.0, -1.5, 1.0), rotation = vector3(0, 0, 0) },
+            { offset = vector3(0.0, -2.5, 1.0), rotation = vector3(0, 0, 0) },
+        },
+        costal2 = {
+            { offset = vector3(0.0, -2.0, 1.5), rotation = vector3(0, 0, 0) },
+            { offset = vector3(1.2, -2.0, 1.5), rotation = vector3(0, 0, 0) },
+            { offset = vector3(-1.2, -2.0, 1.5), rotation = vector3(0, 0, 0) },
+            { offset = vector3(0.0, -4.0, 1.5), rotation = vector3(0, 0, 0) },
+            { offset = vector3(1.2, -4.0, 1.5), rotation = vector3(0, 0, 0) },
+            { offset = vector3(-1.2, -4.0, 1.5), rotation = vector3(0, 0, 0) },
         },
         speeder = {
             { offset = vector3(0.0, -1.0, 0.4), rotation = vector3(0, 0, 0) },
