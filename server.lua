@@ -1950,30 +1950,34 @@ QBCore.Commands.Add('setdeliverylevel', 'Set a player\'s delivery level (Admin O
 end)
 
 -- =============================================================================
--- ORPHANED ENTITY CLEANUP (High-pop server optimization)
+-- ORPHANED ENCOUNTER CLEANUP (High-pop server optimization)
 -- =============================================================================
+-- NOTE: Only cleans up ENCOUNTER entities (pirates, coast guard NPCs/boats)
+-- Player-owned boats are handled by server vehicle persistence - DO NOT DELETE
 
--- Track spawned entities per player for cleanup
-local spawnedEntities = {}
+-- Track spawned ENCOUNTER entities only (not player boats)
+local encounterEntities = {}
 
--- Register spawned entity for tracking
-RegisterNetEvent('cargo:registerEntity', function(entityNetId)
+-- Register encounter entity for tracking (pirates, coast guard, etc.)
+RegisterNetEvent('cargo:registerEncounterEntity', function(entityNetId, entityType)
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
     if not Player then return end
 
     local citizenid = Player.PlayerData.citizenid
-    if not spawnedEntities[citizenid] then
-        spawnedEntities[citizenid] = {}
+    if not encounterEntities[citizenid] then
+        encounterEntities[citizenid] = {}
     end
-    table.insert(spawnedEntities[citizenid], {
+    table.insert(encounterEntities[citizenid], {
         netId = entityNetId,
+        entityType = entityType or 'unknown',  -- 'pirate', 'coastguard', 'ped', 'boat'
         spawnTime = os.time(),
         owner = src
     })
 end)
 
--- Cleanup entities when player disconnects
+-- Cleanup encounter entities when player disconnects
+-- Player boats persist via server vehicle persistence system
 AddEventHandler('playerDropped', function()
     local src = source
     local Player = QBCore.Functions.GetPlayer(src)
@@ -1981,29 +1985,31 @@ AddEventHandler('playerDropped', function()
 
     local citizenid = Player.PlayerData.citizenid
 
-    -- Clean up any active jobs
+    -- Clean up active job state (boat persists via vehicle persistence)
     if activeJobs[citizenid] then
         activeJobs[citizenid] = nil
-        debugPrint("Cleaned up active job for disconnected player: " .. citizenid)
+        debugPrint("Cleaned up active job state for disconnected player: " .. citizenid)
     end
 
     if activeBoats[citizenid] then
+        -- Don't delete the boat - vehicle persistence handles it
+        -- Just clear the tracking reference
         activeBoats[citizenid] = nil
-        debugPrint("Cleaned up active boat for disconnected player: " .. citizenid)
+        debugPrint("Cleared boat reference for disconnected player (boat persists): " .. citizenid)
     end
 
-    -- Remove entity tracking
-    if spawnedEntities[citizenid] then
-        debugPrint("Cleaned up " .. #spawnedEntities[citizenid] .. " tracked entities for: " .. citizenid)
-        spawnedEntities[citizenid] = nil
+    -- Clean up encounter entity tracking
+    if encounterEntities[citizenid] then
+        debugPrint("Cleaned up " .. #encounterEntities[citizenid] .. " encounter entities for: " .. citizenid)
+        encounterEntities[citizenid] = nil
     end
 end)
 
--- Server-side entity sweep (runs every 10 minutes)
--- Cleans up orphaned boats/NPCs when player crashes or disconnects
+-- Server-side encounter entity sweep (runs every 10 minutes)
+-- Only cleans up encounter NPCs (pirates, coast guard) - NOT player boats
 CreateThread(function()
     local SWEEP_INTERVAL = 10 * 60 * 1000  -- 10 minutes
-    local MAX_ENTITY_AGE = 30 * 60         -- 30 minutes max lifetime
+    local MAX_ENCOUNTER_AGE = 30 * 60      -- 30 minutes max lifetime for encounters
 
     while true do
         Wait(SWEEP_INTERVAL)
@@ -2011,7 +2017,7 @@ CreateThread(function()
         local currentTime = os.time()
         local cleanedCount = 0
 
-        for citizenid, entities in pairs(spawnedEntities) do
+        for citizenid, entities in pairs(encounterEntities) do
             -- Check if player is still online
             local playerOnline = false
             local players = QBCore.Functions.GetPlayers()
@@ -2024,26 +2030,26 @@ CreateThread(function()
             end
 
             if not playerOnline then
-                -- Player disconnected - clean up their entities
-                debugPrint("Sweeping orphaned entities for offline player: " .. citizenid)
-                spawnedEntities[citizenid] = nil
+                -- Player disconnected - clean up their encounter entities
+                debugPrint("Sweeping orphaned encounter entities for offline player: " .. citizenid)
+                encounterEntities[citizenid] = nil
                 cleanedCount = cleanedCount + 1
             else
-                -- Player online - clean up old entities
+                -- Player online - clean up old encounter entities
                 local validEntities = {}
                 for _, entity in ipairs(entities) do
-                    if (currentTime - entity.spawnTime) < MAX_ENTITY_AGE then
+                    if (currentTime - entity.spawnTime) < MAX_ENCOUNTER_AGE then
                         table.insert(validEntities, entity)
                     else
                         cleanedCount = cleanedCount + 1
                     end
                 end
-                spawnedEntities[citizenid] = validEntities
+                encounterEntities[citizenid] = validEntities
             end
         end
 
         if cleanedCount > 0 then
-            debugPrint("Entity sweep completed - cleaned " .. cleanedCount .. " orphaned/stale entries")
+            debugPrint("Encounter sweep completed - cleaned " .. cleanedCount .. " orphaned/stale NPC entries")
         end
     end
 end)
