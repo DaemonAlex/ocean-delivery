@@ -360,6 +360,89 @@ Config.CargoTypes = {
         minTier = 3,
         explosionRisk = true,   -- Can explode on heavy impact
     },
+
+    -- ===========================================
+    -- DRUG CARGO (Feeds into drug processing systems)
+    -- ===========================================
+    {
+        id = "cocaine_raw",
+        label = "Unprocessed Cocaine",
+        description = "Raw coca paste from South America - needs processing",
+        payMultiplier = 4.5,
+        xpMultiplier = 2.5,
+        weight = 1.5,
+        fragile = false,
+        illegal = true,
+        perishable = false,
+        minTier = 3,
+        policeChance = 0.30,    -- 30% police chance
+        drugType = "cocaine",   -- For drug system integration
+        drugAmount = 50,        -- Units of raw material delivered
+    },
+    {
+        id = "weed_bales",
+        label = "Cannabis Bales",
+        description = "Bulk marijuana shipment - strong smell",
+        payMultiplier = 3.5,
+        xpMultiplier = 2.0,
+        weight = 2.0,           -- Bulky cargo
+        fragile = false,
+        illegal = true,
+        perishable = false,
+        minTier = 2,
+        policeChance = 0.25,    -- 25% - smell makes it risky
+        drugType = "weed",
+        drugAmount = 100,       -- Units delivered
+    },
+    {
+        id = "meth_precursors",
+        label = "Chemical Precursors",
+        description = "Industrial chemicals - definitely not for meth labs",
+        payMultiplier = 4.0,
+        xpMultiplier = 2.2,
+        weight = 1.8,
+        fragile = true,         -- Chemicals are volatile
+        illegal = true,
+        perishable = false,
+        minTier = 3,
+        policeChance = 0.20,    -- 20% - looks like legit chemicals
+        drugType = "meth",
+        drugAmount = 30,        -- Precursor units
+        explosionRisk = true,   -- Volatile chemicals
+    },
+    {
+        id = "drug_shipment",
+        label = "Processed Product",
+        description = "Street-ready product - maximum heat",
+        payMultiplier = 5.0,    -- Highest payout
+        xpMultiplier = 3.0,
+        weight = 1.0,
+        fragile = false,
+        illegal = true,
+        perishable = false,
+        minTier = 4,            -- Requires highest tier
+        policeChance = 0.35,    -- 35% - highest police risk
+        drugType = "mixed",     -- Could be any processed drug
+        drugAmount = 75,
+    },
+}
+
+-- Drug system integration (DPSRP 1.5)
+Config.DrugIntegration = {
+    enabled = false,            -- Set true to give items on delivery
+    script = 'none',            -- Options: 'qb-drugs', 'qs-drugs', 'custom'
+
+    -- Item names for each drug type (adjust to match your drug script)
+    items = {
+        cocaine = 'cocaine_brick',
+        weed = 'weed_brick',
+        meth = 'meth_tray',
+        mixed = 'drug_package',
+    },
+
+    -- Alternative: Trigger event instead of giving items
+    useEvent = false,
+    eventName = 'drugs:server:receivedShipment',  -- Your drug script's event
 }
 
 -- =============================================================================

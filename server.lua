@@ -655,6 +655,26 @@ local function CompleteDelivery(src, Player, deliveryData)
             level = newLevel,
             streak = stats.current_streak
         })
+
+        -- Drug system integration (DPSRP 1.5)
+        if Config.DrugIntegration and Config.DrugIntegration.enabled and cargoType.drugType then
+            local drugType = cargoType.drugType
+            local drugAmount = cargoType.drugAmount or 1
+
+            if Config.DrugIntegration.useEvent then
+                -- Trigger custom event for drug script
+                TriggerEvent(Config.DrugIntegration.eventName, src, citizenid, drugType, drugAmount, cargoType.id)
+                debugPrint("Triggered drug event: " .. drugType .. " x" .. drugAmount)
+            else
+                -- Give items directly
+                local itemName = Config.DrugIntegration.items[drugType]
+                if itemName then
+                    Player.Functions.AddItem(itemName, drugAmount)
+                    TriggerClientEvent('inventory:client:ItemBox', src, QBCore.Shared.Items[itemName], 'add', drugAmount)
+                    debugPrint("Gave drug items: " .. itemName .. " x" .. drugAmount)
+                end
+            end
+        end
     end
 
     -- Log delivery to history
