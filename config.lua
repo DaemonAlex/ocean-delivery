@@ -655,10 +655,10 @@ Config.Refueling = {
     refuelSpeed = 5,               -- Liters per second
     maxDistance = 15.0,            -- Max distance from fuel pump
 
-    -- External fuel script integration (prevents double fuel costs)
-    -- Set to 'none' to use built-in system, or specify your fuel resource
-    externalFuelScript = 'none',   -- Options: 'none', 'LegacyFuel', 'cdn-fuel', 'ox_fuel'
-    useExternalFuelOnly = false,   -- If true, completely disable built-in fuel system
+    -- DPSRP 1.5: Using qs-fuelstations (provides LegacyFuel compatibility)
+    -- Boats use internal fuel system - qs-fuelstations handles land vehicles
+    externalFuelScript = 'none',   -- Keep 'none' for boats (separate from car fuel)
+    useExternalFuelOnly = false,   -- Boats have their own fuel economy
 
     -- Fuel station markers (blips)
     showBlips = true,
