@@ -560,6 +560,122 @@ Config.CargoTypes = {
         weaponType = "ammo",
         weaponAmount = 500,     -- Rounds of ammo
     },
+
+    -- ===========================================
+    -- BUSINESS CARGO (Industry-specific deliveries)
+    -- ===========================================
+    {
+        id = "restaurant_supplies",
+        label = "Restaurant Supplies",
+        description = "Fresh ingredients for local restaurants - quality drops over time",
+        payMultiplier = 1.8,
+        xpMultiplier = 1.4,
+        weight = 1.5,
+        fragile = false,
+        illegal = false,
+        perishable = true,
+        perishTime = 0.6,           -- 60% of normal time - very urgent
+        minTier = 1,
+        qualityDrop = true,         -- Payout decreases over time
+        qualityDropRate = 0.05,     -- -5% payout per 2 minutes
+        qualityDropInterval = 120,  -- Every 2 minutes (seconds)
+        businessType = "restaurant",
+    },
+    {
+        id = "boutique_clothing",
+        label = "Boutique Fashion",
+        description = "Designer clothing - extremely fragile, avoid any impacts",
+        payMultiplier = 2.8,
+        xpMultiplier = 2.0,
+        weight = 0.4,               -- Light but delicate
+        fragile = true,
+        illegal = false,
+        perishable = false,
+        minTier = 2,
+        damageMultiplier = 3.0,     -- 3x damage penalty - ruined fabric
+        businessType = "clothing",
+        premiumInsurance = true,    -- Eligible for premium cargo insurance
+    },
+    {
+        id = "vehicle_parts",
+        label = "Vehicle Parts",
+        description = "Heavy auto parts - requires large vessel, reduces speed",
+        payMultiplier = 3.0,
+        xpMultiplier = 2.2,
+        weight = 3.5,               -- Very heavy
+        fragile = false,
+        illegal = false,
+        perishable = false,
+        minTier = 3,                -- Marquis/Tug only
+        requiredBoats = {"marquis", "tug", "urchin"},  -- Specific boats only
+        heavyLoad = true,           -- Reduces boat speed
+        heavyLoadSpeedMult = 0.8,   -- 80% of normal speed
+        loadStress = 0.15,          -- +15% maintenance cost
+        businessType = "import",
+    },
+    {
+        id = "supercar_parts",
+        label = "Supercar Components",
+        description = "Exotic car parts - gang exclusive, high value",
+        payMultiplier = 5.5,
+        xpMultiplier = 3.0,
+        weight = 2.5,
+        fragile = true,             -- Precision parts
+        illegal = false,
+        perishable = false,
+        minTier = 3,
+        requiredBoats = {"marquis", "tug", "urchin"},
+        heavyLoad = true,
+        heavyLoadSpeedMult = 0.85,
+        loadStress = 0.20,          -- +20% maintenance cost
+        businessType = "import",
+        gangExclusive = true,       -- Requires gang membership
+        requiredGangRank = 2,       -- Minimum gang rank to accept
+    },
+    {
+        id = "nightclub_supplies",
+        label = "Nightclub Supplies",
+        description = "Premium alcohol and supplies for clubs",
+        payMultiplier = 2.2,
+        xpMultiplier = 1.6,
+        weight = 2.0,
+        fragile = true,             -- Bottles break easily
+        illegal = false,
+        perishable = false,
+        minTier = 2,
+        damageMultiplier = 1.5,
+        businessType = "nightclub",
+    },
+    {
+        id = "yacht_provisions",
+        label = "Yacht Provisions",
+        description = "Luxury supplies for private yachts - premium clients",
+        payMultiplier = 3.5,
+        xpMultiplier = 2.5,
+        weight = 1.0,
+        fragile = true,
+        illegal = false,
+        perishable = true,
+        perishTime = 0.75,
+        minTier = 2,
+        qualityDrop = true,
+        qualityDropRate = 0.03,     -- -3% per 2 minutes
+        qualityDropInterval = 120,
+        premiumInsurance = true,
+        businessType = "luxury",
+    },
+}
+
+-- =============================================================================
+-- PREMIUM INSURANCE SYSTEM
+-- =============================================================================
+
+Config.PremiumInsurance = {
+    enabled = true,
+    baseCost = 5000,                -- Base cost for premium coverage
+    costPercentOfValue = 0.02,      -- 2% of cargo value
+    payoutPercent = 0.90,           -- 90% payout (vs standard 80%)
+    eligibleCargo = {"boutique_clothing", "yacht_provisions", "supercar_parts"},
 }
 
 -- Drug system integration (DPSRP 1.5)
@@ -787,6 +903,105 @@ Config.SafeHarbor = {
     gangMemberBonus = 1.15,         -- 15% bonus payout for gang members at their territory
     rivalGangPenalty = 0.8,         -- 20% less payout for rival gang members
     neutralBonus = 1.0,             -- No bonus/penalty for non-gang members
+}
+
+-- =============================================================================
+-- BUSINESS DELIVERY POINTS (Industry-specific locations)
+-- =============================================================================
+
+Config.BusinessDeliveryPoints = {
+    -- Restaurant/Food destinations
+    {
+        name = "Vanilla Unicorn Beach Dock",
+        coords = vector3(-1336.0, -1266.0, 0.0),
+        tier = 1,
+        hasFuel = false,
+        businessType = "restaurant",
+        acceptedCargo = {"restaurant_supplies", "seafood", "yacht_provisions"},
+        payBonus = 1.10,            -- 10% bonus for direct delivery
+    },
+    {
+        name = "Bahama Mamas West",
+        coords = vector3(-1388.0, -588.0, 0.0),
+        tier = 1,
+        hasFuel = false,
+        businessType = "nightclub",
+        acceptedCargo = {"nightclub_supplies", "restaurant_supplies"},
+        payBonus = 1.15,
+    },
+    {
+        name = "Tequi-La-La Beach Drop",
+        coords = vector3(-560.0, 278.0, 0.0),
+        tier = 1,
+        hasFuel = false,
+        businessType = "nightclub",
+        acceptedCargo = {"nightclub_supplies"},
+        payBonus = 1.10,
+    },
+
+    -- Clothing/Fashion destinations
+    {
+        name = "Ponsonbys Del Perro",
+        coords = vector3(-1454.0, -234.0, 0.0),
+        tier = 2,
+        hasFuel = false,
+        businessType = "clothing",
+        acceptedCargo = {"boutique_clothing"},
+        payBonus = 1.20,            -- 20% bonus for fashion
+    },
+    {
+        name = "Rockford Hills Boutique",
+        coords = vector3(-710.0, -152.0, 0.0),
+        tier = 2,
+        hasFuel = false,
+        businessType = "clothing",
+        acceptedCargo = {"boutique_clothing", "yacht_provisions"},
+        payBonus = 1.25,            -- Premium area
+    },
+
+    -- Vehicle Import destinations
+    {
+        name = "Port of LS Vehicle Bay",
+        coords = vector3(-90.0, -2400.0, 0.0),
+        tier = 3,
+        hasFuel = true,
+        businessType = "import",
+        acceptedCargo = {"vehicle_parts", "supercar_parts"},
+        payBonus = 1.15,
+        gangTerritory = nil,        -- Neutral ground
+    },
+    {
+        name = "Premium Deluxe Motorsport Dock",
+        coords = vector3(-34.0, -1112.0, 0.0),
+        tier = 3,
+        hasFuel = false,
+        businessType = "import",
+        acceptedCargo = {"supercar_parts", "vehicle_parts"},
+        payBonus = 1.30,            -- High-end dealership
+        gangExclusive = true,       -- Gang members only
+    },
+
+    -- Luxury/Yacht destinations
+    {
+        name = "Casino Yacht Club",
+        coords = vector3(-1595.0, 4773.0, 0.0),
+        tier = 2,
+        hasFuel = true,
+        businessType = "luxury",
+        acceptedCargo = {"yacht_provisions", "restaurant_supplies", "nightclub_supplies"},
+        payBonus = 1.25,
+    },
+    {
+        name = "Private Yacht Anchorage",
+        coords = vector3(1529.0, 3778.0, 0.0),
+        tier = 2,
+        hasFuel = false,
+        businessType = "luxury",
+        acceptedCargo = {"yacht_provisions"},
+        payBonus = 1.35,            -- Very exclusive
+        vipOnly = true,             -- VIP members only (high level)
+        requiredLevel = 8,
+    },
 }
 
 -- =============================================================================
