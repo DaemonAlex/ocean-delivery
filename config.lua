@@ -519,6 +519,12 @@ Config.PoliceIntegration = {
     alertPolice = true,           -- Send alerts to police
     minCops = 0,                  -- Minimum cops online for illegal cargo
     wantedLevel = 2,              -- Stars when caught
+
+    -- Dynamic risk based on police count (DPSRP optimization)
+    dynamicRisk = true,           -- Adjust risk based on online police
+    noCopsAlternative = true,     -- If no cops online, spawn NPC Coast Guard instead
+    riskPerCop = 0.02,            -- +2% police chance per online cop (max from policeChance)
+    maxRiskMultiplier = 2.0,      -- Maximum 2x the base policeChance
 }
 
 -- =============================================================================
@@ -528,7 +534,7 @@ Config.PoliceIntegration = {
 Config.FleetOwnership = {
     enabled = true,
     maxShipsPerPlayer = 5,
-    sellBackPercent = 0.6,         -- Get 60% back when selling
+    sellBackPercent = 0.6,         -- Get 60% back when selling (adjust for hardcore economy: 0.4-0.5)
     insurancePayoutPercent = 0.8,  -- 80% of value on insurance claim
     maintenanceInterval = 24,      -- Hours between maintenance charges
     repairCostMultiplier = 0.1,    -- 10% of boat price for full repair
@@ -577,8 +583,9 @@ Config.Financing = {
 
 Config.RandomEncounters = {
     enabled = true,
-    checkInterval = 30000,         -- Check every 30 seconds
+    checkInterval = 60000,         -- Check every 60 seconds (optimized for performance)
     minDistanceFromPort = 500,     -- Don't spawn encounters near ports
+    entityCullDistance = 200.0,    -- Auto-delete encounter entities beyond this distance
 
     -- Encounter types
     encounters = {
@@ -647,6 +654,11 @@ Config.Refueling = {
     costPerLiter = 3,              -- $ per liter
     refuelSpeed = 5,               -- Liters per second
     maxDistance = 15.0,            -- Max distance from fuel pump
+
+    -- External fuel script integration (prevents double fuel costs)
+    -- Set to 'none' to use built-in system, or specify your fuel resource
+    externalFuelScript = 'none',   -- Options: 'none', 'LegacyFuel', 'cdn-fuel', 'ox_fuel'
+    useExternalFuelOnly = false,   -- If true, completely disable built-in fuel system
 
     -- Fuel station markers (blips)
     showBlips = true,

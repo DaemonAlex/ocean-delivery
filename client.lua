@@ -1477,6 +1477,26 @@ local function checkEncounterCompletion()
     local playerPed = PlayerPedId()
     local playerCoords = GetEntityCoords(playerPed)
 
+    -- Distance-based entity culling - prevents entity leaking
+    local CULL_DISTANCE = Config.RandomEncounters.entityCullDistance or 200.0
+    local shouldCull = true
+    for _, entity in ipairs(encounterEntities) do
+        if DoesEntityExist(entity) then
+            local entityCoords = GetEntityCoords(entity)
+            if #(playerCoords - entityCoords) < CULL_DISTANCE then
+                shouldCull = false
+                break
+            end
+        end
+    end
+
+    if shouldCull and #encounterEntities > 0 then
+        debugPrint("Culling encounter entities - player moved >200m away")
+        TriggerServerEvent('cargo:logEncounter', activeEncounter.type, 'abandoned', 0, 0, selectedCargo and selectedCargo.id)
+        cleanupEncounter()
+        return
+    end
+
     if activeEncounter.type == "pirates" then
         -- Check if all pirates are dead
         local allDead = true

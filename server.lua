@@ -82,7 +82,8 @@ CreateThread(function()
             status ENUM('completed', 'failed', 'cancelled') DEFAULT 'completed',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_citizenid (citizenid),
-            INDEX idx_status (status)
+            INDEX idx_status (status),
+            INDEX idx_created_at (created_at)
         )
     ]], {}, function(success)
         if success then
@@ -176,7 +177,7 @@ CreateThread(function()
             id INT AUTO_INCREMENT PRIMARY KEY,
             citizenid VARCHAR(50) NOT NULL,
             encounter_type VARCHAR(50) NOT NULL,
-            outcome ENUM('success', 'failed', 'escaped', 'caught') DEFAULT 'success',
+            outcome ENUM('success', 'failed', 'escaped', 'caught', 'abandoned') DEFAULT 'success',
             reward INT DEFAULT 0,
             xp_earned INT DEFAULT 0,
             cargo_type VARCHAR(50) DEFAULT NULL,
