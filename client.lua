@@ -69,6 +69,142 @@ local function formatNumber(num)
 end
 
 -- =============================================================================
+-- HEAVY LOAD PHYSICS & ENVIRONMENTAL HAZARDS
+-- =============================================================================
+
+-- Current physics modifiers (updated by weather and cargo)
+local currentSpeedMult = 1.0
+local currentHandlingMult = 1.0
+local currentAccelMult = 1.0
+local isHeavyLoad = false
+
+-- Apply cargo-based physics to boat
+local function ApplyCargoPhysics(boat, cargo)
+    if not boat or not DoesEntityExist(boat) then return end
+    if not Config.HeavyLoadPhysics or not Config.HeavyLoadPhysics.enabled then return end
+
+    local speedMult = Config.HeavyLoadPhysics.defaultSpeedMult
+    local handlingMult = Config.HeavyLoadPhysics.defaultHandlingMult
+    local accelMult = 1.0
+
+    -- Check if cargo is heavy load
+    if cargo then
+        -- Weight-based handling reduction
+        if cargo.weight and cargo.weight > 1.0 then
+            handlingMult = handlingMult / cargo.weight
+            accelMult = accelMult / cargo.weight
+        end
+
+        -- Heavy load cargo (vehicle parts, military hardware, etc.)
+        if cargo.heavyLoad then
+            isHeavyLoad = true
+
+            -- Use cargo-specific speed mult or default
+            if Config.HeavyLoadPhysics.useCargoOverrides and cargo.heavyLoadSpeedMult then
+                speedMult = cargo.heavyLoadSpeedMult
+            else
+                speedMult = Config.HeavyLoadPhysics.heavyLoadSpeedMult
+            end
+
+            handlingMult = handlingMult * Config.HeavyLoadPhysics.heavyLoadHandlingMult
+            accelMult = accelMult * Config.HeavyLoadPhysics.heavyLoadAccelMult
+
+            debugPrint(string.format("Heavy load physics applied: Speed %.0f%%, Handling %.0f%%", speedMult * 100, handlingMult * 100))
+        end
+    end
+
+    -- Store current modifiers
+    currentSpeedMult = speedMult
+    currentHandlingMult = handlingMult
+    currentAccelMult = accelMult
+
+    -- Apply to vehicle
+    SetVehicleEnginePowerMultiplier(boat, accelMult)
+    ModifyVehicleTopSpeed(boat, speedMult)
+
+    debugPrint(string.format("Cargo physics: Speed %.2f, Handling %.2f, Accel %.2f", speedMult, handlingMult, accelMult))
+end
+
+-- Get current weather ID for physics calculations
+local function GetCurrentWeatherId()
+    if not currentWeather then return "clear" end
+    return currentWeather.id or "clear"
+end
+
+-- Apply weather-based handling penalties
+local function ApplyWeatherPhysics(boat)
+    if not boat or not DoesEntityExist(boat) then return end
+    if not Config.EnvironmentalHazards or not Config.EnvironmentalHazards.enabled then return end
+
+    local weatherId = GetCurrentWeatherId()
+    local weatherHandling = Config.EnvironmentalHazards.weatherHandlingPenalty[weatherId] or 1.0
+
+    -- Combine with cargo handling
+    local finalHandling = currentHandlingMult * weatherHandling
+
+    -- Apply combined modifiers
+    SetVehicleEnginePowerMultiplier(boat, currentAccelMult * weatherHandling)
+
+    return weatherHandling
+end
+
+-- Calculate weather-based damage multiplier for fragile cargo
+local function GetWeatherDamageMultiplier()
+    if not Config.EnvironmentalHazards or not Config.EnvironmentalHazards.enabled then
+        return 1.0
+    end
+
+    local weatherId = GetCurrentWeatherId()
+    return Config.EnvironmentalHazards.weatherDamageMultipliers[weatherId] or 1.0
+end
+
+-- Passive weather damage thread (fragile cargo takes damage over time in bad weather)
+CreateThread(function()
+    while true do
+        Wait(1000)
+
+        if isOnJob and currentBoat and selectedCargo and selectedCargo.fragile then
+            if Config.EnvironmentalHazards and Config.EnvironmentalHazards.passiveDamageEnabled then
+                local weatherId = GetCurrentWeatherId()
+                local passiveRate = Config.EnvironmentalHazards.passiveDamageRates[weatherId] or 0
+
+                if passiveRate > 0 then
+                    -- Apply passive damage every interval
+                    local interval = Config.EnvironmentalHazards.passiveDamageInterval or 30
+                    Wait((interval - 1) * 1000) -- Wait for interval (minus the 1 second already waited)
+
+                    if isOnJob and selectedCargo and selectedCargo.fragile then
+                        cargoDamage = cargoDamage + passiveRate
+                        if cargoDamage > 1.0 then cargoDamage = 1.0 end
+
+                        if passiveRate >= 0.02 then -- Only notify for significant damage
+                            lib.notify({
+                                title = "Weather Damage",
+                                description = string.format("Fragile cargo taking damage! (%.0f%% total)", cargoDamage * 100),
+                                type = "warning"
+                            })
+                        end
+
+                        debugPrint(string.format("Passive weather damage: +%.1f%% (Total: %.1f%%)", passiveRate * 100, cargoDamage * 100))
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- Continuous physics update thread (weather effects on handling)
+CreateThread(function()
+    while true do
+        Wait(5000) -- Update every 5 seconds
+
+        if isOnJob and currentBoat and DoesEntityExist(currentBoat) then
+            ApplyWeatherPhysics(currentBoat)
+        end
+    end
+end)
+
+-- =============================================================================
 -- WEATHER DETECTION
 -- =============================================================================
 
@@ -166,7 +302,15 @@ local function checkCargoDamage()
 
     -- Fragile cargo takes more damage
     if selectedCargo.fragile then
-        newDamage = newDamage * 1.5
+        local baseMult = selectedCargo.damageMultiplier or 1.5
+
+        -- Apply weather-based damage multiplier (thunderstorms = 2x damage!)
+        local weatherMult = GetWeatherDamageMultiplier()
+        newDamage = newDamage * baseMult * weatherMult
+
+        if weatherMult > 1.0 then
+            debugPrint(string.format("Weather damage multiplier: %.1fx (total fragile mult: %.1fx)", weatherMult, baseMult * weatherMult))
+        end
     end
 
     -- Weight affects damage (heavier = more momentum damage)
@@ -448,14 +592,8 @@ local function spawnBoat(routeData, boatData)
     -- Set initial fuel
     currentFuel = Config.FuelSystem.startingFuel
 
-    -- Apply handling modifiers based on cargo weight
-    if selectedCargo and selectedCargo.weight then
-        local weight = selectedCargo.weight
-        if weight > 1.0 then
-            -- Heavier cargo = slower acceleration, worse handling
-            SetVehicleEnginePowerMultiplier(boat, 1.0 / weight)
-        end
-    end
+    -- Apply handling modifiers based on cargo weight and heavy load physics
+    ApplyCargoPhysics(boat, selectedCargo)
 
     TriggerServerEvent('cargo:saveBoatEntity', NetworkGetNetworkIdFromEntity(boat))
 

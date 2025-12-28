@@ -310,6 +310,100 @@ Config.MaintenanceSystem = {
 }
 
 -- =============================================================================
+-- ENVIRONMENTAL HAZARDS (Weather affects fragile cargo)
+-- =============================================================================
+
+Config.EnvironmentalHazards = {
+    enabled = true,
+
+    -- Weather-based damage multipliers for fragile cargo
+    -- These multiply the base damageMultiplier on fragile cargo
+    weatherDamageMultipliers = {
+        clear = 1.0,                -- Normal damage
+        cloudy = 1.0,               -- Normal damage
+        rain = 1.3,                 -- 30% more damage to fragile cargo
+        thunder = 2.0,              -- DOUBLE damage in thunderstorms
+        fog = 1.2,                  -- 20% more (reduced visibility = accidents)
+    },
+
+    -- Handling penalties in bad weather (stacks with cargo weight)
+    weatherHandlingPenalty = {
+        clear = 1.0,
+        cloudy = 1.0,
+        rain = 0.9,                 -- 10% worse handling
+        thunder = 0.7,              -- 30% worse handling
+        fog = 0.85,                 -- 15% worse handling
+    },
+
+    -- Passive damage accumulation (fragile cargo takes damage over time in bad weather)
+    passiveDamageEnabled = true,
+    passiveDamageInterval = 30,     -- Check every 30 seconds
+    passiveDamageRates = {
+        clear = 0.0,
+        cloudy = 0.0,
+        rain = 0.01,                -- 1% damage per interval in rain
+        thunder = 0.03,             -- 3% damage per interval in storms
+        fog = 0.005,                -- 0.5% damage per interval in fog
+    },
+}
+
+-- =============================================================================
+-- DYNAMIC PAYOUT SYSTEM (Distance-based rewards)
+-- =============================================================================
+
+Config.DynamicPayouts = {
+    enabled = true,
+
+    -- Base payout per meter traveled
+    payPerMeter = 0.015,            -- $0.015 per meter = $15 per km
+
+    -- Distance tier bonuses (reward longer routes)
+    distanceTiers = {
+        { minDistance = 0,     multiplier = 1.0 },      -- 0-2km: standard
+        { minDistance = 2000,  multiplier = 1.1 },      -- 2-5km: 10% bonus
+        { minDistance = 5000,  multiplier = 1.25 },     -- 5-10km: 25% bonus
+        { minDistance = 10000, multiplier = 1.5 },      -- 10-20km: 50% bonus (Cayo runs)
+        { minDistance = 20000, multiplier = 2.0 },      -- 20km+: DOUBLE payout
+    },
+
+    -- International route bonus (Cayo Perico)
+    internationalBonus = 1.25,      -- 25% bonus for crossing to Cayo
+
+    -- Risk-adjusted payouts
+    riskPayouts = {
+        safeHarbor = 1.15,          -- 15% bonus for delivering to gang territory
+        illegalCargo = 1.20,        -- 20% bonus for illegal deliveries
+        badWeather = 1.10,          -- 10% bonus for completing in bad weather
+        nightDelivery = 1.05,       -- 5% bonus for night runs (20:00-06:00)
+    },
+}
+
+-- =============================================================================
+-- HEAVY LOAD PHYSICS
+-- =============================================================================
+
+Config.HeavyLoadPhysics = {
+    enabled = true,
+
+    -- Speed reduction for heavy cargo
+    defaultSpeedMult = 1.0,         -- Normal speed
+    heavyLoadSpeedMult = 0.8,       -- 80% speed for generic heavy loads
+
+    -- Handling reduction for heavy cargo
+    defaultHandlingMult = 1.0,
+    heavyLoadHandlingMult = 0.85,   -- 85% handling for heavy loads
+
+    -- Acceleration penalty
+    heavyLoadAccelMult = 0.7,       -- 70% acceleration with heavy cargo
+
+    -- Fuel consumption increase
+    heavyLoadFuelMult = 1.3,        -- 30% more fuel consumption
+
+    -- Cargo-specific overrides (use cargo's heavyLoadSpeedMult if defined)
+    useCargoOverrides = true,
+}
+
+-- =============================================================================
 -- CARGO TYPES
 -- =============================================================================
 
@@ -380,7 +474,7 @@ Config.CargoTypes = {
     {
         id = "weapons",
         label = "Military Hardware",
-        description = "Heavy cargo, high risk, high reward",
+        description = "Heavy cargo, high risk, high reward - Master Mariners only",
         payMultiplier = 4.0,
         xpMultiplier = 2.5,
         weight = 2.5,           -- Severely affects handling
@@ -389,6 +483,9 @@ Config.CargoTypes = {
         perishable = false,
         minTier = 3,
         policeChance = 0.25,
+        requiredLevel = 8,      -- Master Mariner only
+        heavyLoad = true,
+        heavyLoadSpeedMult = 0.75,  -- 75% speed with military gear
     },
     {
         id = "luxury",
@@ -893,6 +990,49 @@ Config.Ports = {
         coastGuardMod = 0.4,
         pirateMod = 1.8,
         illegalOnly = true,
+    },
+
+    -- ===========================================
+    -- CAYO PERICO (Long-haul international routes)
+    -- ===========================================
+    {
+        name = "Cayo Perico Main Dock",
+        coords = vector3(4943.0, -5175.0, 0.0),
+        tier = 3,
+        hasFuel = true,
+        cayoPerico = true,          -- International route
+        distanceBonus = 1.5,        -- 50% bonus for long distance
+        coastGuardMod = 0.1,        -- 90% less coast guard (international waters)
+        pirateMod = 2.5,            -- High pirate risk
+        illegalOnly = false,
+        requiredLevel = 6,          -- Must be experienced captain
+    },
+    {
+        name = "Cayo Perico North Beach",
+        coords = vector3(5005.0, -4612.0, 0.0),
+        tier = 3,
+        hasFuel = false,
+        cayoPerico = true,
+        distanceBonus = 1.6,
+        coastGuardMod = 0.05,       -- Almost no coast guard
+        pirateMod = 3.0,            -- Very dangerous
+        illegalOnly = true,         -- Smuggling only
+        safeHarbor = true,
+        gangTerritory = "cartel",   -- El Rubio's territory
+    },
+    {
+        name = "Cayo Perico Airstrip Dock",
+        coords = vector3(4518.0, -4556.0, 0.0),
+        tier = 3,
+        hasFuel = true,
+        cayoPerico = true,
+        distanceBonus = 1.55,
+        coastGuardMod = 0.2,
+        pirateMod = 2.0,
+        illegalOnly = false,
+        acceptedCargo = {"cocaine_raw", "weapons", "drug_shipment", "supercar_parts"},
+        gangExclusive = true,
+        requiredLevel = 8,
     },
 }
 
