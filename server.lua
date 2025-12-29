@@ -34,13 +34,27 @@ local function debugPrint(message)
 end
 
 -- =============================================================================
--- DATABASE INITIALIZATION
+-- DATABASE INITIALIZATION (Optimized - check first, create only if needed)
 -- =============================================================================
 
-CreateThread(function()
-    Wait(1000) -- Wait for MySQL to initialize
+local dbInitialized = false
 
-    -- Create table for player progression
+-- Check if tables exist before running expensive CREATE TABLE queries
+local function CheckTablesExist(callback)
+    MySQL.Async.fetchScalar([[
+        SELECT COUNT(*) FROM information_schema.tables
+        WHERE table_schema = DATABASE()
+        AND table_name = 'ocean_delivery_players'
+    ]], {}, function(count)
+        callback(count and count > 0)
+    end)
+end
+
+-- Run all CREATE TABLE statements (only called on first install)
+local function CreateAllTables()
+    debugPrint("First-time setup: Creating database tables...")
+
+    -- Single batch creation for efficiency
     MySQL.Async.execute([[
         CREATE TABLE IF NOT EXISTS ocean_delivery_players (
             citizenid VARCHAR(50) PRIMARY KEY,
@@ -57,167 +71,138 @@ CreateThread(function()
             last_delivery TIMESTAMP NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        )
-    ]], {}, function(success)
-        if success then
-            debugPrint("Player progression table initialized")
-        end
-    end)
-
-    -- Create table for delivery history
-    MySQL.Async.execute([[
-        CREATE TABLE IF NOT EXISTS ocean_delivery_history (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            citizenid VARCHAR(50) NOT NULL,
-            boat_model VARCHAR(50),
-            cargo_type VARCHAR(50),
-            start_port VARCHAR(100),
-            end_port VARCHAR(100),
-            distance FLOAT,
-            payout INT,
-            xp_earned INT,
-            weather VARCHAR(50),
-            damage_percent FLOAT DEFAULT 0,
-            completion_time INT,
-            status ENUM('completed', 'failed', 'cancelled') DEFAULT 'completed',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_citizenid (citizenid),
-            INDEX idx_status (status),
-            INDEX idx_created_at (created_at)
-        )
-    ]], {}, function(success)
-        if success then
-            debugPrint("Delivery history table initialized")
-        end
-    end)
-
-    -- Create table for custom locations if it doesn't exist
-    MySQL.Async.execute([[
-        CREATE TABLE IF NOT EXISTS cargo_locations (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            name VARCHAR(100) NOT NULL,
-            x FLOAT NOT NULL,
-            y FLOAT NOT NULL,
-            z FLOAT NOT NULL,
-            tier INT DEFAULT 1,
-            has_fuel BOOLEAN DEFAULT FALSE,
-            enabled BOOLEAN DEFAULT TRUE,
-            added_by VARCHAR(50),
-            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ]], {}, function(success)
-        if success then
-            debugPrint("Cargo locations table initialized")
-            LoadCustomLocations()
-        end
-    end)
-
-    -- Legacy table for backwards compatibility
-    MySQL.Async.execute([[
-        CREATE TABLE IF NOT EXISTS cargo_deliveries (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            player_id VARCHAR(50) NOT NULL,
-            deliveries INT DEFAULT 0,
-            distance FLOAT DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ]], {})
-
-    -- Fleet ownership table
-    MySQL.Async.execute([[
-        CREATE TABLE IF NOT EXISTS ocean_delivery_fleet (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            citizenid VARCHAR(50) NOT NULL,
-            boat_model VARCHAR(50) NOT NULL,
-            boat_name VARCHAR(100) DEFAULT NULL,
-            condition_percent FLOAT DEFAULT 100.0,
-            fuel_level FLOAT DEFAULT 100.0,
-            total_deliveries INT DEFAULT 0,
-            total_distance FLOAT DEFAULT 0,
-            purchase_price INT DEFAULT 0,
-            insured BOOLEAN DEFAULT FALSE,
-            is_starter BOOLEAN DEFAULT FALSE,
-            last_maintenance TIMESTAMP NULL,
-            purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_citizenid (citizenid),
-            INDEX idx_model (boat_model)
-        )
-    ]], {}, function(success)
-        if success then
-            debugPrint("Fleet ownership table initialized")
-            -- Add is_starter column if it doesn't exist (for existing databases)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ]], {}, function()
+        MySQL.Async.execute([[
+            CREATE TABLE IF NOT EXISTS ocean_delivery_history (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                citizenid VARCHAR(50) NOT NULL,
+                boat_model VARCHAR(50),
+                cargo_type VARCHAR(50),
+                start_port VARCHAR(100),
+                end_port VARCHAR(100),
+                distance FLOAT,
+                payout INT,
+                xp_earned INT,
+                weather VARCHAR(50),
+                damage_percent FLOAT DEFAULT 0,
+                completion_time INT,
+                status ENUM('completed', 'failed', 'cancelled') DEFAULT 'completed',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_citizenid (citizenid),
+                INDEX idx_status (status),
+                INDEX idx_created_at (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ]], {}, function()
             MySQL.Async.execute([[
-                ALTER TABLE ocean_delivery_fleet ADD COLUMN IF NOT EXISTS is_starter BOOLEAN DEFAULT FALSE
-            ]], {})
-        end
+                CREATE TABLE IF NOT EXISTS cargo_locations (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(100) NOT NULL,
+                    x FLOAT NOT NULL,
+                    y FLOAT NOT NULL,
+                    z FLOAT NOT NULL,
+                    tier INT DEFAULT 1,
+                    has_fuel BOOLEAN DEFAULT FALSE,
+                    enabled BOOLEAN DEFAULT TRUE,
+                    added_by VARCHAR(50),
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ]], {}, function()
+                MySQL.Async.execute([[
+                    CREATE TABLE IF NOT EXISTS ocean_delivery_fleet (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        citizenid VARCHAR(50) NOT NULL,
+                        boat_model VARCHAR(50) NOT NULL,
+                        boat_name VARCHAR(100) DEFAULT NULL,
+                        condition_percent FLOAT DEFAULT 100.0,
+                        fuel_level FLOAT DEFAULT 100.0,
+                        total_deliveries INT DEFAULT 0,
+                        total_distance FLOAT DEFAULT 0,
+                        purchase_price INT DEFAULT 0,
+                        insured BOOLEAN DEFAULT FALSE,
+                        is_starter BOOLEAN DEFAULT FALSE,
+                        last_maintenance TIMESTAMP NULL,
+                        purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        INDEX idx_citizenid (citizenid),
+                        INDEX idx_model (boat_model)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                ]], {}, function()
+                    MySQL.Async.execute([[
+                        CREATE TABLE IF NOT EXISTS ocean_delivery_maintenance (
+                            id INT AUTO_INCREMENT PRIMARY KEY,
+                            fleet_id INT NOT NULL,
+                            citizenid VARCHAR(50) NOT NULL,
+                            maintenance_type ENUM('repair', 'insurance', 'routine') DEFAULT 'routine',
+                            cost INT DEFAULT 0,
+                            notes VARCHAR(255) DEFAULT NULL,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            INDEX idx_fleet (fleet_id),
+                            INDEX idx_citizenid (citizenid)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    ]], {}, function()
+                        MySQL.Async.execute([[
+                            CREATE TABLE IF NOT EXISTS ocean_delivery_encounters (
+                                id INT AUTO_INCREMENT PRIMARY KEY,
+                                citizenid VARCHAR(50) NOT NULL,
+                                encounter_type VARCHAR(50) NOT NULL,
+                                outcome ENUM('success', 'failed', 'escaped', 'caught', 'abandoned') DEFAULT 'success',
+                                reward INT DEFAULT 0,
+                                xp_earned INT DEFAULT 0,
+                                cargo_type VARCHAR(50) DEFAULT NULL,
+                                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                INDEX idx_citizenid (citizenid)
+                            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                        ]], {}, function()
+                            MySQL.Async.execute([[
+                                CREATE TABLE IF NOT EXISTS ocean_delivery_loans (
+                                    id INT AUTO_INCREMENT PRIMARY KEY,
+                                    citizenid VARCHAR(50) NOT NULL,
+                                    fleet_id INT NOT NULL,
+                                    boat_model VARCHAR(50) NOT NULL,
+                                    total_amount INT NOT NULL,
+                                    down_payment INT NOT NULL,
+                                    financed_amount INT NOT NULL,
+                                    interest_rate FLOAT NOT NULL,
+                                    weekly_payment INT NOT NULL,
+                                    weeks_total INT NOT NULL,
+                                    weeks_paid INT DEFAULT 0,
+                                    amount_paid INT DEFAULT 0,
+                                    amount_remaining INT NOT NULL,
+                                    missed_payments INT DEFAULT 0,
+                                    status ENUM('active', 'paid', 'defaulted', 'repossessed') DEFAULT 'active',
+                                    next_payment_due TIMESTAMP NULL,
+                                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                    paid_off_at TIMESTAMP NULL,
+                                    INDEX idx_citizenid (citizenid),
+                                    INDEX idx_fleet (fleet_id),
+                                    INDEX idx_status (status)
+                                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                            ]], {}, function()
+                                debugPrint("All database tables created successfully")
+                                dbInitialized = true
+                                LoadCustomLocations()
+                            end)
+                        end)
+                    end)
+                end)
+            end)
+        end)
     end)
+end
 
-    -- Maintenance log table
-    MySQL.Async.execute([[
-        CREATE TABLE IF NOT EXISTS ocean_delivery_maintenance (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            fleet_id INT NOT NULL,
-            citizenid VARCHAR(50) NOT NULL,
-            maintenance_type ENUM('repair', 'insurance', 'routine') DEFAULT 'routine',
-            cost INT DEFAULT 0,
-            notes VARCHAR(255) DEFAULT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_fleet (fleet_id),
-            INDEX idx_citizenid (citizenid)
-        )
-    ]], {}, function(success)
-        if success then
-            debugPrint("Maintenance log table initialized")
-        end
-    end)
+CreateThread(function()
+    Wait(500) -- Brief wait for MySQL
 
-    -- Encounters log table
-    MySQL.Async.execute([[
-        CREATE TABLE IF NOT EXISTS ocean_delivery_encounters (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            citizenid VARCHAR(50) NOT NULL,
-            encounter_type VARCHAR(50) NOT NULL,
-            outcome ENUM('success', 'failed', 'escaped', 'caught', 'abandoned') DEFAULT 'success',
-            reward INT DEFAULT 0,
-            xp_earned INT DEFAULT 0,
-            cargo_type VARCHAR(50) DEFAULT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_citizenid (citizenid)
-        )
-    ]], {}, function(success)
-        if success then
-            debugPrint("Encounters log table initialized")
-        end
-    end)
-
-    -- Boat loans/financing table
-    MySQL.Async.execute([[
-        CREATE TABLE IF NOT EXISTS ocean_delivery_loans (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            citizenid VARCHAR(50) NOT NULL,
-            fleet_id INT NOT NULL,
-            boat_model VARCHAR(50) NOT NULL,
-            total_amount INT NOT NULL,
-            down_payment INT NOT NULL,
-            financed_amount INT NOT NULL,
-            interest_rate FLOAT NOT NULL,
-            weekly_payment INT NOT NULL,
-            weeks_total INT NOT NULL,
-            weeks_paid INT DEFAULT 0,
-            amount_paid INT DEFAULT 0,
-            amount_remaining INT NOT NULL,
-            missed_payments INT DEFAULT 0,
-            status ENUM('active', 'paid', 'defaulted', 'repossessed') DEFAULT 'active',
-            next_payment_due TIMESTAMP NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            paid_off_at TIMESTAMP NULL,
-            INDEX idx_citizenid (citizenid),
-            INDEX idx_fleet (fleet_id),
-            INDEX idx_status (status)
-        )
-    ]], {}, function(success)
-        if success then
-            debugPrint("Boat loans table initialized")
+    -- Quick metadata check - only 1 fast query instead of 8 slow ones
+    CheckTablesExist(function(exists)
+        if exists then
+            -- Tables exist - skip CREATE TABLE queries entirely
+            debugPrint("Database tables already exist - skipping creation")
+            dbInitialized = true
+            LoadCustomLocations()
+        else
+            -- First install - create all tables
+            CreateAllTables()
         end
     end)
 end)
